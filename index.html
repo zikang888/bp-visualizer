@@ -203,11 +203,11 @@ MathJax = {
   .panel-badge.mom { background: rgba(34,211,238,0.15); color: var(--momentum); }
   .panel-badge.adam { background: rgba(167,139,250,0.15); color: var(--adam); }
 
-  #arch-panel { grid-row: span 2; }
+  #arch-panel { }
 
-  .arch-svg { width: 100%; height: 100%; min-height: 520px; }
-  .loss-canvas { width: 100%; height: 100%; min-height: 280px; border-radius: var(--radius-sm); display: block; }
-  .gradient-svg { width: 100%; height: 100%; min-height: 280px; }
+  .arch-svg { width: 100%; height: 100%; min-height: 320px; }
+  .loss-canvas { width: 100%; height: 100%; min-height: 310px; border-radius: var(--radius-sm); display: block; }
+  .gradient-svg { width: 100%; height: 100%; min-height: 340px; display: block; }
 
   .info-row {
     display: flex;
@@ -434,7 +434,7 @@ MathJax = {
       <span class="panel-title" id="loss-panel-title">损失景观 · 优化轨迹</span>
       <span class="panel-badge" id="loss-badge">Loss = —</span>
     </div>
-    <canvas id="loss-canvas" class="loss-canvas" width="560" height="280"></canvas>
+    <canvas id="loss-canvas" class="loss-canvas" width="560" height="320"></canvas>
     <div class="legend" id="loss-legend"></div>
   </div>
 
@@ -538,6 +538,8 @@ function switchTab(tab) {
   document.getElementById('ctrl-optimizer').classList.toggle('hidden', tab !== 'optimizer');
 
   if (tab === 'transformer') {
+    document.getElementById('arch-panel').style.gridRow = 'span 2';
+    archSvg.setAttribute('viewBox', '0 0 760 480');
     document.getElementById('header-subtitle').textContent = 'Backpropagation through Transformer Architecture';
     document.getElementById('arch-panel-title').textContent = 'Transformer 架构 · 梯度传播';
     document.getElementById('loss-panel-title').textContent = '损失景观 · 优化轨迹';
@@ -553,6 +555,8 @@ function switchTab(tab) {
     document.getElementById('gradient-legend').innerHTML = '';
     resetAll();
   } else {
+    document.getElementById('arch-panel').style.gridRow = 'span 1';
+    archSvg.setAttribute('viewBox', '0 0 500 170');
     document.getElementById('header-subtitle').textContent = 'Momentum vs Adam — Layer-wise Gradient Propagation';
     document.getElementById('arch-panel-title').textContent = 'MLP 网络 · 层间梯度传播';
     document.getElementById('loss-panel-title').textContent = '损失景观 · 双优化器轨迹';
@@ -846,8 +850,8 @@ function drawLossLandscape() {
   const lossGrid = new Float32Array(W * H);
   for (let py = 0; py < H; py++) {
     for (let px = 0; px < W; px++) {
-      const x = (px / W - 0.5) * 4;
-      const y = -(py / H - 0.5) * 4;
+      const x = (px / W - 0.5) * 5;
+      const y = -(py / H - 0.5) * 5;
       const z = lossFn(x, y);
       lossGrid[py * W + px] = z;
       if (z < minZ) minZ = z;
@@ -928,8 +932,8 @@ function drawLossLandscape() {
   lossCtx.fillText('w₂', 6, 16);
 
   const gx = 0, gy = 0;
-  const sx = (gx / 4 + 0.5) * W;
-  const sy = (-gy / 4 + 0.5) * H;
+  const sx = (gx / 5 + 0.5) * W;
+  const sy = (-gy / 5 + 0.5) * H;
   lossCtx.fillStyle = '#34d399';
   lossCtx.beginPath();
   lossCtx.arc(sx, sy, 6, 0, Math.PI * 2);
@@ -963,21 +967,21 @@ function drawPath(ctx, path, color, alpha) {
   ctx.beginPath();
   const W = lossCanvas.width, H = lossCanvas.height;
   ctx.moveTo(
-    (path[0].x / 4 + 0.5) * W,
-    (-path[0].y / 4 + 0.5) * H
+    (path[0].x / 5 + 0.5) * W,
+    (-path[0].y / 5 + 0.5) * H
   );
   for (let i = 1; i < path.length; i++) {
     ctx.lineTo(
-      (path[i].x / 4 + 0.5) * W,
-      (-path[i].y / 4 + 0.5) * H
+      (path[i].x / 5 + 0.5) * W,
+      (-path[i].y / 5 + 0.5) * H
     );
   }
   ctx.stroke();
   ctx.globalAlpha = 1;
 
   path.forEach((p, i) => {
-    const px = (p.x / 4 + 0.5) * W;
-    const py = (-p.y / 4 + 0.5) * H;
+    const px = (p.x / 5 + 0.5) * W;
+    const py = (-p.y / 5 + 0.5) * H;
     ctx.fillStyle = color;
     ctx.globalAlpha = alpha * (0.3 + 0.7 * i / Math.max(1, path.length - 1));
     ctx.beginPath();
@@ -999,8 +1003,8 @@ function updateLossLandscape() {
   if (state.gdPath.length > 0) {
     const lastGd = state.gdPath[state.gdPath.length - 1];
     const W = lossCanvas.width, H = lossCanvas.height;
-    const pxGd = (lastGd.x / 4 + 0.5) * W;
-    const pyGd = (-lastGd.y / 4 + 0.5) * H;
+    const pxGd = (lastGd.x / 5 + 0.5) * W;
+    const pyGd = (-lastGd.y / 5 + 0.5) * H;
     lossCtx.fillStyle = '#4d90fe';
     lossCtx.beginPath();
     lossCtx.arc(pxGd, pyGd, 6, 0, Math.PI * 2);
@@ -1012,8 +1016,8 @@ function updateLossLandscape() {
   if (state.sgdPath.length > 0) {
     const lastSgd = state.sgdPath[state.sgdPath.length - 1];
     const W = lossCanvas.width, H = lossCanvas.height;
-    const pxSgd = (lastSgd.x / 4 + 0.5) * W;
-    const pySgd = (-lastSgd.y / 4 + 0.5) * H;
+    const pxSgd = (lastSgd.x / 5 + 0.5) * W;
+    const pySgd = (-lastSgd.y / 5 + 0.5) * H;
     lossCtx.fillStyle = '#fb923c';
     lossCtx.beginPath();
     lossCtx.arc(pxSgd, pySgd, 5, 0, Math.PI * 2);
@@ -1794,13 +1798,13 @@ function resetOptModel() {
 }
 
 function modelToLandscape(W, B) {
-  const x = W[0] && W[0][0] ? W[0][0][0] * 3 : 0;
-  const y = W[0] && W[0][0] ? W[0][0][1] * 3 : 0;
-  return { x: Math.max(-2, Math.min(2, x)), y: Math.max(-2, Math.min(2, y)) };
+  const wx = W[0] && W[0][0] ? W[0][0][0] : 0;
+  const wy = W[0] && W[0][0] ? W[0][0][1] : 0;
+  return { x: Math.max(-2.5, Math.min(2.5, wx * 4)), y: Math.max(-2.5, Math.min(2.5, wy * 4)) };
 }
 
 function w2c(wx, wy) {
-  return { px: (wx / 4 + 0.5) * lossCanvas.width, py: (-wy / 4 + 0.5) * lossCanvas.height };
+  return { px: (wx / 5 + 0.5) * lossCanvas.width, py: (-wy / 5 + 0.5) * lossCanvas.height };
 }
 
 function drawOptPath(ctx, path, color, alpha) {
@@ -1847,8 +1851,8 @@ function drawMLP() {
   const dims = state.dims;
   const layerNames = ['Input', 'Hidden₁', 'Hidden₂', 'Output'];
   const layerColors = ['#4d90fe', '#22d3ee', '#a78bfa', '#f472b6'];
-  const totalW = 500, totalH = 200;
-  const marginX = 60, marginY = 25;
+  const totalW = 480, totalH = 140;
+  const marginX = 55, marginY = 20;
   const cols = dims.length;
   const colSpacing = (totalW - 2 * marginX) / (cols - 1);
 
