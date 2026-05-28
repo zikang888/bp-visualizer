@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>优化器对比可视化 — Momentum vs Adam</title>
+<script>
+MathJax = {
+  tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$']] },
+  options: { enableMenu: false },
+};
+</script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg-primary: #0b0e14;
+  --bg-secondary: #12161f;
+  --bg-card: #181c26;
+  --bg-elevated: #1e2333;
+  --border: #252b38;
+  --border-accent: #323b4c;
+  --text-primary: #e4e8f0;
+  --text-secondary: #8b95a8;
+  --text-tertiary: #5c6578;
+  --momentum: #22d3ee;
+  --adam: #a78bfa;
+  --accent-green: #34d399;
+  --accent-orange: #fb923c;
+  --accent-red: #f87171;
+  --accent-pink: #f472b6;
+  --shad-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shad-lg: 0 8px 30px rgba(0,0,0,0.5);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+.header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.header-title h1 {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--momentum), var(--adam));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-title .subtitle {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 2px;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-accent);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--border-accent); border-color: var(--text-tertiary); }
+.btn:active { transform: scale(0.97); }
+
+.btn-primary { background: #4d90fe; border-color: #4d90fe; color: #fff; }
+.btn-primary:hover { background: #3a7de8; border-color: #3a7de8; }
+
+.btn-warn { background: var(--accent-orange); border-color: var(--accent-orange); color: #fff; }
+.btn-warn:hover { background: #e8801a; border-color: #e8801a; }
+
+.btn-sm { padding: 5px 12px; font-size: 0.76rem; }
+
+.btn-group {
+  display: flex;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-accent);
+}
+.btn-group .btn { border-radius: 0; border: none; border-right: 1px solid var(--border-accent); }
+.btn-group .btn:last-child { border-right: none; }
+
+.main-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 14px;
+  padding: 16px 22px;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .main-container { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  position: relative;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.panel-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.panel-badge {
+  font-size: 0.68rem;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+.panel-badge.mom { background: rgba(34,211,238,0.15); color: var(--momentum); }
+.panel-badge.adam { background: rgba(167,139,250,0.15); color: var(--adam); }
+.panel-badge.neutral { background: rgba(77,144,254,0.15); color: #4d90fe; }
+
+#landscape-panel { grid-row: span 2; }
+#loss-panel { }
+
+.loss-canvas { width: 100%; height: 100%; min-height: 280px; border-radius: var(--radius-sm); display: block; }
+.converge-svg { width: 100%; height: 100%; min-height: 280px; }
+
+.info-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.info-chip {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+}
+.info-chip .val { font-weight: 500; }
+.info-chip.mom-chip .val { color: var(--momentum); }
+.info-chip.adam-chip .val { color: var(--adam); }
+
+.formula-box {
+  margin-top: 10px;
+  padding: 12px 16px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--adam);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 2;
+}
+
+.formula-box .formula-main { color: var(--text-primary); font-size: 0.85rem; line-height: 2.4; }
+.formula-box .formula-desc {
+  display: block;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  font-family: 'Inter', sans-serif;
+}
+
+.slider-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.slider-group input[type="range"] {
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-accent);
+  outline: none;
+}
+.slider-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+}
+
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.step-counter {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+.footer {
+  padding: 14px 22px;
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  border-top: 1px solid var(--border);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.pulse { animation: pulse 1.5s infinite; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">
+    <h1>优化器对比 · Momentum vs Adam</h1>
+    <div class="subtitle">Stochastic Gradient Descent Optimization — Loss Landscape Navigation</div>
+  </div>
+  <div class="controls">
+    <div class="slider-group">
+      <span>η =</span>
+      <input type="range" id="lr-slider" min="0.01" max="0.5" step="0.01" value="0.1" style="width:70px;">
+      <span id="lr-val" style="font-family:'JetBrains Mono',monospace;min-width:34px;">0.10</span>
+    </div>
+    <div class="slider-group">
+      <span>β =</span>
+      <input type="range" id="beta-slider" min="0.5" max="0.99" step="0.01" value="0.9" style="width:70px;">
+      <span id="beta-val" style="font-family:'JetBrains Mono',monospace;min-width:34px;">0.90</span>
+    </div>
+    <div class="slider-group">
+      <span>β₂ =</span>
+      <input type="range" id="beta2-slider" min="0.9" max="0.999" step="0.001" value="0.999" style="width:70px;">
+      <span id="beta2-val" style="font-family:'JetBrains Mono',monospace;min-width:38px;">0.999</span>
+    </div>
+    <button class="btn btn-primary" id="btn-play">▶ 开始</button>
+    <button class="btn" id="btn-step">⏭ 单步</button>
+    <button class="btn btn-warn" id="btn-reset">↺ 重置</button>
+    <div class="slider-group">
+      <span>速度</span>
+      <input type="range" id="speed-slider" min="1" max="5" step="1" value="3" style="width:55px;">
+    </div>
+    <span class="step-counter" id="iter-counter">iter 0</span>
+  </div>
+</div>
+
+<div class="main-container">
+  <div class="panel" id="landscape-panel">
+    <div class="panel-header">
+      <span class="panel-title">损失景观 · 双优化器轨迹</span>
+      <span class="panel-badge neutral" id="loss-badge">Loss = —</span>
+    </div>
+    <canvas id="loss-canvas" class="loss-canvas" width="580" height="580"></canvas>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:var(--momentum);"></span>Momentum (SGD + β)</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--adam);"></span>Adam (β₁, β₂)</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-green);"></span>全局最优点</div>
+    </div>
+  </div>
+
+  <div class="panel" id="loss-panel">
+    <div class="panel-header">
+      <span class="panel-title">损失曲线 · 收敛速度对比</span>
+      <span class="panel-badge neutral" id="end-loss-badge">—</span>
+    </div>
+    <svg id="converge-svg" class="converge-svg" viewBox="0 0 560 290" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+
+  <div class="panel" id="detail-panel">
+    <div class="panel-header">
+      <span class="panel-title">当前步 · 更新量细节</span>
+      <span class="panel-badge adam" id="detail-badge">—</span>
+    </div>
+    <div class="formula-box" id="formula-display">
+      <span style="color:var(--text-tertiary);">点击「开始」或「单步」查看每一步的优化器内部状态</span>
+    </div>
+    <div class="info-row" id="info-row"></div>
+  </div>
+
+  <div class="panel" id="algo-panel">
+    <div class="panel-header">
+      <span class="panel-title">算法定义 · 公式对比</span>
+    </div>
+    <div class="formula-box" id="algo-display">
+      <div style="color:var(--momentum);font-weight:600;margin-bottom:4px;">Momentum</div>
+      <div class="formula-main">
+        $v_t = \beta v_{t-1} + \eta \nabla L(\theta_t)$<br>
+        $\theta_{t+1} = \theta_t - v_t$
+      </div>
+      <div class="formula-desc">累积历史梯度作为「动量」，在一致方向上加速，在震荡方向上平滑</div>
+      <div style="color:var(--adam);font-weight:600;margin-top:10px;margin-bottom:4px;">Adam</div>
+      <div class="formula-main" style="line-height:2.6;">
+        $m_t = \beta_1 m_{t-1} + (1-\beta_1)\nabla L(\theta_t)$<br>
+        $v_t = \beta_2 v_{t-1} + (1-\beta_2)\nabla L(\theta_t)^2$<br>
+        $\hat{m}_t = \frac{m_t}{1-\beta_1^t},\quad \hat{v}_t = \frac{v_t}{1-\beta_2^t}$<br>
+        $\theta_{t+1} = \theta_t - \eta\frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\varepsilon}$
+      </div>
+      <div class="formula-desc">自适应学习率：一阶矩估计方向 + 二阶矩估计缩放步长，偏差修正处理冷启动</div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Optimizer Comparison Visualizer · SGD + Momentum vs Adam · 教学用途
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+
+let state = {
+  lr: 0.1,
+  beta: 0.9,
+  beta2: 0.999,
+  speed: 3,
+  running: false,
+  iteration: 0,
+  timer: null,
+  maxIter: 80,
+
+  mom: { x: -1.8, y: 1.2, vx: 0, vy: 0, path: [{ x: -1.8, y: 1.2 }], losses: [] },
+  adam: {
+    x: -1.8, y: 1.2,
+    mx: 0, my: 0,
+    vx: 0, vy: 0,
+    path: [{ x: -1.8, y: 1.2 }],
+    losses: [],
+  },
+};
+
+// ============================================================
+// LOSS FUNCTIONS
+// ============================================================
+
+function lossFn(x, y) {
+  const x2 = x * x, y2 = y * y;
+  return x2 + 2 * y2 + 0.5 * Math.sin(3 * x) * Math.cos(2 * y) + 0.3 * Math.cos(4 * x) * Math.sin(3 * y);
+}
+
+function lossGrad(x, y) {
+  return {
+    dx: 2 * x + 1.5 * Math.cos(3 * x) * Math.cos(2 * y) - 1.2 * Math.sin(4 * x) * Math.sin(3 * y),
+    dy: 4 * y - Math.sin(3 * x) * Math.sin(2 * y) + 0.9 * Math.cos(4 * x) * Math.cos(3 * y),
+  };
+}
+
+// ============================================================
+// CANVAS LOSS LANDSCAPE
+// ============================================================
+
+const lossCanvas = document.getElementById('loss-canvas');
+const lossCtx = lossCanvas.getContext('2d');
+
+function colormap(t) {
+  t = Math.max(0, Math.min(1, t));
+  if (t < 0.2) {
+    const s = t / 0.2;
+    return [Math.floor(5 + s * 10), Math.floor(18 + s * 35), Math.floor(35 + s * 20)];
+  } else if (t < 0.45) {
+    const s = (t - 0.2) / 0.25;
+    return [Math.floor(15 + s * 15), Math.floor(53 + s * 25), Math.floor(55 - s * 30)];
+  } else if (t < 0.7) {
+    const s = (t - 0.45) / 0.25;
+    return [Math.floor(30 + s * 55), Math.floor(78 - s * 30), Math.floor(25 - s * 12)];
+  } else {
+    const s = (t - 0.7) / 0.3;
+    return [Math.floor(85 + s * 85), Math.floor(48 - s * 20), Math.floor(13 + s * 5)];
+  }
+}
+
+function drawLandscape() {
+  const W = lossCanvas.width, H = lossCanvas.height;
+  lossCtx.clearRect(0, 0, W, H);
+
+  let minZ = Infinity, maxZ = -Infinity;
+  const lossGrid = new Float32Array(W * H);
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const x = (px / W - 0.5) * 4;
+      const y = -(py / H - 0.5) * 4;
+      const z = lossFn(x, y);
+      lossGrid[py * W + px] = z;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+  }
+
+  const imageData = lossCtx.createImageData(W, H);
+  const range = maxZ - minZ || 1;
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const t = (lossGrid[py * W + px] - minZ) / range;
+      const [r, g, b] = colormap(t);
+      const idx = (py * W + px) * 4;
+      imageData.data[idx] = r;
+      imageData.data[idx + 1] = g;
+      imageData.data[idx + 2] = b;
+      imageData.data[idx + 3] = 255;
+    }
+  }
+  lossCtx.putImageData(imageData, 0, 0);
+
+  // Contour lines
+  const step = 3;
+  const levels = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8];
+  levels.forEach(level => {
+    const isMajor = (level % 2 === 0);
+    lossCtx.strokeStyle = isMajor ? 'rgba(180,190,210,0.35)' : 'rgba(140,150,170,0.18)';
+    lossCtx.lineWidth = isMajor ? 1.2 : 0.6;
+    lossCtx.beginPath();
+    for (let py = 0; py < H - step; py += step) {
+      for (let px = 0; px < W - step; px += step) {
+        const z00 = lossGrid[py * W + px];
+        const z10 = lossGrid[py * W + px + step];
+        const z01 = lossGrid[(py + step) * W + px];
+        const z11 = lossGrid[(py + step) * W + px + step];
+        const corners = [z00, z10, z11, z01];
+        let above = 0;
+        for (let c = 0; c < 4; c++) if (corners[c] >= level) above++;
+        if (above === 0 || above === 4) continue;
+        const pts = [];
+        const cx = [px, px + step, px + step, px];
+        const cy = [py, py, py + step, py + step];
+        const nx = [px + step, px + step, px, px];
+        const ny = [py, py + step, py + step, py];
+        for (let e = 0; e < 4; e++) {
+          const a = corners[e], b = corners[(e + 1) % 4];
+          if ((a >= level && b < level) || (a < level && b >= level)) {
+            const t = (level - a) / (b - a);
+            pts.push({ x: cx[e] + (nx[e] - cx[e]) * t, y: cy[e] + (ny[e] - cy[e]) * t });
+          }
+        }
+        if (pts.length >= 2) { lossCtx.moveTo(pts[0].x, pts[0].y); lossCtx.lineTo(pts[1].x, pts[1].y); }
+      }
+    }
+    lossCtx.stroke();
+  });
+
+  // Axis labels
+  lossCtx.fillStyle = '#4a5068';
+  lossCtx.font = '11px Inter, sans-serif';
+  lossCtx.textAlign = 'center';
+  lossCtx.fillText('w₁', W / 2, H - 4);
+  lossCtx.textAlign = 'left';
+  lossCtx.fillText('w₂', 6, 16);
+
+  // Global min
+  const sx = W / 2, sy = H / 2;
+  lossCtx.fillStyle = '#34d399';
+  lossCtx.beginPath(); lossCtx.arc(sx, sy, 6, 0, Math.PI * 2); lossCtx.fill();
+  lossCtx.shadowColor = '#34d399'; lossCtx.shadowBlur = 12;
+  lossCtx.fillStyle = 'rgba(52,211,153,0.35)';
+  lossCtx.beginPath(); lossCtx.arc(sx, sy, 9, 0, Math.PI * 2); lossCtx.fill();
+  lossCtx.shadowBlur = 0;
+}
+
+function worldToCanvas(wx, wy) {
+  return {
+    px: (wx / 4 + 0.5) * lossCanvas.width,
+    py: (-wy / 4 + 0.5) * lossCanvas.height,
+  };
+}
+
+function drawPath(ctx, path, color, alpha) {
+  if (path.length < 2) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  const p0 = worldToCanvas(path[0].x, path[0].y);
+  ctx.moveTo(p0.px, p0.py);
+  for (let i = 1; i < path.length; i++) {
+    const p = worldToCanvas(path[i].x, path[i].y);
+    ctx.lineTo(p.px, p.py);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  path.forEach((pt, i) => {
+    const p = worldToCanvas(pt.x, pt.y);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = alpha * (0.25 + 0.75 * i / Math.max(1, path.length - 1));
+    ctx.beginPath();
+    ctx.arc(p.px, p.py, i === path.length - 1 ? 4 : 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function drawVelocity(ctx, x, y, vx, vy, color) {
+  const p = worldToCanvas(x, y);
+  const scale = 6;
+  const ex = p.px + vx * scale, ey = p.py - vy * scale;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(p.px, p.py);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(ex, ey, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function updateLandscape() {
+  drawLandscape();
+  const mom = state.mom, adam = state.adam;
+
+  if (mom.path.length > 0) {
+    drawPath(lossCtx, mom.path, '#22d3ee', 0.95);
+    const last = mom.path[mom.path.length - 1];
+    if (mom.vx !== 0 || mom.vy !== 0) {
+      drawVelocity(lossCtx, last.x, last.y, mom.vx, mom.vy, 'rgba(34,211,238,0.5)');
+    }
+  }
+  if (adam.path.length > 0) {
+    drawPath(lossCtx, adam.path, '#a78bfa', 0.95);
+    const last = adam.path[adam.path.length - 1];
+    // Adam effective step direction
+    const mx = adam.mx, my = adam.my,
+      vx = adam.vx, vy = adam.vy;
+    if (Math.abs(mx) > 1e-6 || Math.abs(my) > 1e-6) {
+      const eps = 1e-8;
+      const dirX = mx / (Math.sqrt(vx) + eps);
+      const dirY = my / (Math.sqrt(vy) + eps);
+      const mag = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+      drawVelocity(lossCtx, last.x, last.y, dirX / mag * 0.3, dirY / mag * 0.3, 'rgba(167,139,250,0.5)');
+    }
+  }
+
+  // Current position markers
+  [state.mom, state.adam].forEach((opt, i) => {
+    if (opt.path.length === 0) return;
+    const last = opt.path[opt.path.length - 1];
+    const p = worldToCanvas(last.x, last.y);
+    const color = i === 0 ? '#22d3ee' : '#a78bfa';
+    lossCtx.fillStyle = color;
+    lossCtx.beginPath();
+    lossCtx.arc(p.px, p.py, 5, 0, Math.PI * 2);
+    lossCtx.fill();
+    lossCtx.strokeStyle = '#fff';
+    lossCtx.lineWidth = 1.5;
+    lossCtx.stroke();
+  });
+}
+
+// ============================================================
+// CONVERGENCE PLOT (D3)
+// ============================================================
+
+const convergeSvg = d3.select('#converge-svg');
+
+function drawConvergence() {
+  convergeSvg.selectAll('*').remove();
+  const W = 520, H = 250;
+  const margin = { top: 20, right: 30, bottom: 30, left: 50 };
+  const g = convergeSvg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+  const cw = W - margin.left - margin.right;
+  const ch = H - margin.top - margin.bottom;
+
+  const momLosses = state.mom.losses;
+  const adamLosses = state.adam.losses;
+  const maxIter = Math.max(momLosses.length, adamLosses.length, 2);
+  const allLosses = [...momLosses, ...adamLosses];
+  const maxLoss = Math.max(0.5, d3.max(allLosses) || 4);
+
+  const xScale = d3.scaleLinear().domain([0, maxIter - 1]).range([0, cw]);
+  const yScale = d3.scaleLinear().domain([0, maxLoss * 1.1]).range([ch, 0]);
+
+  // Grid
+  yScale.ticks(5).forEach(t => {
+    g.append('line').attr('x1', 0).attr('x2', cw).attr('y1', yScale(t)).attr('y2', yScale(t))
+      .attr('stroke', '#1e2333').attr('stroke-width', 0.5).attr('stroke-dasharray', '3,3');
+  });
+
+  // Axes
+  g.append('line').attr('x1', 0).attr('x2', cw).attr('y1', ch).attr('y2', ch)
+    .attr('stroke', '#252b38').attr('stroke-width', 1);
+  g.append('line').attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', ch)
+    .attr('stroke', '#252b38').attr('stroke-width', 1);
+
+  // Y labels
+  g.selectAll('.yl').data(yScale.ticks(5)).join('text')
+    .attr('x', -8).attr('y', d => yScale(d) + 4)
+    .attr('text-anchor', 'end').attr('fill', '#5c6578').attr('font-size', '10')
+    .attr('font-family', 'JetBrains Mono, monospace').text(d => d.toFixed(2));
+
+  // X labels
+  xScale.ticks(Math.min(maxIter, 10)).forEach(t => {
+    g.append('text')
+      .attr('x', xScale(t)).attr('y', ch + 16)
+      .attr('text-anchor', 'middle').attr('fill', '#5c6578').attr('font-size', '9')
+      .attr('font-family', 'JetBrains Mono, monospace').text(t);
+  });
+
+  // Axis labels
+  g.append('text').attr('x', cw / 2).attr('y', ch + 28)
+    .attr('text-anchor', 'middle').attr('fill', '#4a5068').attr('font-size', '10')
+    .attr('font-family', 'Inter, sans-serif').text('Iteration');
+
+  // Legend
+  g.append('circle').attr('cx', cw - 140).attr('cy', -8).attr('r', 4).attr('fill', '#22d3ee');
+  g.append('text').attr('x', cw - 132).attr('y', -4)
+    .attr('fill', '#22d3ee').attr('font-size', '10').attr('font-family', 'Inter, sans-serif').text('Momentum');
+  g.append('circle').attr('cx', cw - 50).attr('cy', -8).attr('r', 4).attr('fill', '#a78bfa');
+  g.append('text').attr('x', cw - 42).attr('y', -4)
+    .attr('fill', '#a78bfa').attr('font-size', '10').attr('font-family', 'Inter, sans-serif').text('Adam');
+
+  function drawCurve(data, color) {
+    if (data.length < 2) return;
+    const line = d3.line()
+      .x((d, i) => xScale(i))
+      .y(d => yScale(d))
+      .curve(d3.curveMonotoneX);
+    g.append('path').datum(data).attr('d', line)
+      .attr('fill', 'none').attr('stroke', color).attr('stroke-width', 2);
+    g.selectAll(null).data(data).join('circle')
+      .attr('cx', (d, i) => xScale(i))
+      .attr('cy', d => yScale(d))
+      .attr('r', 2).attr('fill', color).attr('opacity', 0.7);
+  }
+
+  drawCurve(momLosses, '#22d3ee');
+  drawCurve(adamLosses, '#a78bfa');
+}
+
+// ============================================================
+// SIMULATION
+// ============================================================
+
+function stepAdam(x, y, mx, my, vx, vy, iter) {
+  const grad = lossGrad(x, y);
+  const b1 = state.beta, b2 = state.beta2;
+  const eps = 1e-8;
+
+  const nmx = b1 * mx + (1 - b1) * grad.dx;
+  const nmy = b1 * my + (1 - b1) * grad.dy;
+  const nvx = b2 * vx + (1 - b2) * grad.dx * grad.dx;
+  const nvy = b2 * vy + (1 - b2) * grad.dy * grad.dy;
+
+  const b1t = 1 - Math.pow(b1, iter);
+  const b2t = 1 - Math.pow(b2, iter);
+  const mhx = nmx / b1t, mhy = nmy / b1t;
+  const vhx = nvx / b2t, vhy = nvy / b2t;
+
+  const nx = x - state.lr * mhx / (Math.sqrt(vhx) + eps);
+  const ny = y - state.lr * mhy / (Math.sqrt(vhy) + eps);
+
+  return { x: nx, y: ny, mx: nmx, my: nmy, vx: nvx, vy: nvy, loss: lossFn(nx, ny) };
+}
+
+function stepMomentum(x, y, vx, vy) {
+  const grad = lossGrad(x, y);
+  const b = state.beta;
+  const nvx = b * vx + state.lr * grad.dx;
+  const nvy = b * vy + state.lr * grad.dy;
+  const nx = x - nvx;
+  const ny = y - nvy;
+  return { x: nx, y: ny, vx: nvx, vy: nvy, loss: lossFn(nx, ny) };
+}
+
+function runOneIteration() {
+  const iter = state.iteration + 1;
+
+  const momStep = stepMomentum(state.mom.x, state.mom.y, state.mom.vx, state.mom.vy);
+  state.mom.x = momStep.x;
+  state.mom.y = momStep.y;
+  state.mom.vx = momStep.vx;
+  state.mom.vy = momStep.vy;
+  state.mom.path.push({ x: momStep.x, y: momStep.y });
+  state.mom.losses.push(momStep.loss);
+
+  const adamStep = stepAdam(state.adam.x, state.adam.y, state.adam.mx, state.adam.my, state.adam.vx, state.adam.vy, iter);
+  state.adam.x = adamStep.x;
+  state.adam.y = adamStep.y;
+  state.adam.mx = adamStep.mx;
+  state.adam.my = adamStep.my;
+  state.adam.vx = adamStep.vx;
+  state.adam.vy = adamStep.vy;
+  state.adam.path.push({ x: adamStep.x, y: adamStep.y });
+  state.adam.losses.push(adamStep.loss);
+
+  state.iteration = iter;
+}
+
+function updateDetailPanel() {
+  const display = document.getElementById('formula-display');
+  const badge = document.getElementById('detail-badge');
+  const iter = state.iteration;
+
+  if (iter === 0) {
+    display.innerHTML = '<span style="color:var(--text-tertiary);">点击「开始」或「单步」查看每一步的优化器内部状态</span>';
+    badge.textContent = '—';
+    badge.className = 'panel-badge adam';
+    document.getElementById('info-row').innerHTML = '';
+    return;
+  }
+
+  badge.textContent = 'iter ' + iter;
+  badge.className = 'panel-badge adam';
+
+  const mom = state.mom, adam = state.adam;
+  const lastMom = mom.path[mom.path.length - 1];
+  const lastAdam = adam.path[adam.path.length - 1];
+
+  const gradMom = lossGrad(lastMom.x, lastMom.y);
+  const gradAdam = lossGrad(lastAdam.x, lastAdam.y);
+
+  display.innerHTML = `
+    <div style="color:var(--momentum);font-weight:600;margin-bottom:2px;">Momentum  — step ${iter}</div>
+    <div class="formula-main">
+      $\\nabla L = (${gradMom.dx.toFixed(3)}, ${gradMom.dy.toFixed(3)})$<br>
+      $v_t = ${state.beta.toFixed(2)} \\cdot v_{t-1} + ${state.lr.toFixed(2)} \\cdot \\nabla L$<br>
+      $v_t = (${mom.vx.toFixed(3)}, ${mom.vy.toFixed(3)})$<br>
+      $\\theta_t = (${lastMom.x.toFixed(3)}, ${lastMom.y.toFixed(3)})$
+    </div>
+    <div class="formula-desc">动量累积: |v| = ${Math.sqrt(mom.vx * mom.vx + mom.vy * mom.vy).toFixed(3)}</div>
+
+    <div style="color:var(--adam);font-weight:600;margin-top:8px;margin-bottom:2px;">Adam  — step ${iter}</div>
+    <div class="formula-main">
+      $\\nabla L = (${gradAdam.dx.toFixed(3)}, ${gradAdam.dy.toFixed(3)})$<br>
+      $m_t = (${adam.mx.toFixed(3)}, ${adam.my.toFixed(3)})$<br>
+      $v_t = (${adam.vx.toFixed(5)}, ${adam.vy.toFixed(5)})$<br>
+      $\\theta_t = (${lastAdam.x.toFixed(3)}, ${lastAdam.y.toFixed(3)})$
+    </div>
+    <div class="formula-desc">自适应步长: |m̂/√v̂| = ${(Math.sqrt(adam.mx*adam.mx/(adam.vx+1e-8) + adam.my*adam.my/(adam.vy+1e-8))).toFixed(3)}</div>
+  `;
+
+  if (window.MathJax && MathJax.typesetPromise) {
+    MathJax.typesetPromise([display]).catch(console.warn);
+  }
+
+  document.getElementById('info-row').innerHTML = `
+    <div class="info-chip mom-chip">Momentum Loss <span class="val">${mom.losses[mom.losses.length-1].toFixed(4)}</span></div>
+    <div class="info-chip adam-chip">Adam Loss <span class="val">${adam.losses[adam.losses.length-1].toFixed(4)}</span></div>
+    <div class="info-chip">η <span class="val">${state.lr.toFixed(2)}</span></div>
+    <div class="info-chip">β <span class="val">${state.beta.toFixed(2)}</span></div>
+  `;
+}
+
+function updateAll() {
+  updateLandscape();
+  drawConvergence();
+  updateDetailPanel();
+
+  const momLoss = state.mom.losses.length > 0 ? state.mom.losses[state.mom.losses.length - 1].toFixed(4) : '—';
+  const adamLoss = state.adam.losses.length > 0 ? state.adam.losses[state.adam.losses.length - 1].toFixed(4) : '—';
+  document.getElementById('loss-badge').textContent = `M: ${momLoss}  A: ${adamLoss}`;
+  document.getElementById('end-loss-badge').textContent = `M: ${momLoss}  A: ${adamLoss}`;
+  document.getElementById('iter-counter').textContent = `iter ${state.iteration}`;
+}
+
+// ============================================================
+// ANIMATION
+// ============================================================
+
+function getSpeedMs() {
+  return [600, 400, 250, 150, 80][state.speed - 1] || 250;
+}
+
+function animate() {
+  if (state.iteration >= state.maxIter) {
+    stopAnimation();
+    return;
+  }
+  runOneIteration();
+  updateAll();
+
+  if (state.running) {
+    state.timer = setTimeout(animate, getSpeedMs());
+  }
+}
+
+function startAnimation() {
+  if (state.running) {
+    stopAnimation();
+    return;
+  }
+  state.running = true;
+  document.getElementById('btn-play').textContent = '⏸ 停止';
+  animate();
+}
+
+function stopAnimation() {
+  state.running = false;
+  document.getElementById('btn-play').textContent = '▶ 开始';
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+}
+
+function stepOnce() {
+  if (state.running) return;
+  if (state.iteration >= state.maxIter) return;
+  runOneIteration();
+  updateAll();
+}
+
+function resetAll() {
+  stopAnimation();
+  state.iteration = 0;
+  state.mom = { x: -1.8, y: 1.2, vx: 0, vy: 0, path: [{ x: -1.8, y: 1.2 }], losses: [] };
+  state.adam = {
+    x: -1.8, y: 1.2,
+    mx: 0, my: 0, vx: 0, vy: 0,
+    path: [{ x: -1.8, y: 1.2 }], losses: [],
+  };
+
+  document.getElementById('loss-badge').textContent = 'Loss = —';
+  document.getElementById('end-loss-badge').textContent = '—';
+  document.getElementById('detail-badge').textContent = '—';
+  document.getElementById('detail-badge').className = 'panel-badge adam';
+  document.getElementById('formula-display').innerHTML =
+    '<span style="color:var(--text-tertiary);">点击「开始」或「单步」查看每一步的优化器内部状态</span>';
+  document.getElementById('info-row').innerHTML = '';
+  document.getElementById('iter-counter').textContent = 'iter 0';
+
+  updateAll();
+}
+
+// ============================================================
+// EVENT HANDLERS
+// ============================================================
+
+document.getElementById('btn-play').addEventListener('click', startAnimation);
+document.getElementById('btn-step').addEventListener('click', stepOnce);
+document.getElementById('btn-reset').addEventListener('click', resetAll);
+
+document.getElementById('lr-slider').addEventListener('input', function () {
+  state.lr = parseFloat(this.value);
+  document.getElementById('lr-val').textContent = state.lr.toFixed(2);
+});
+
+document.getElementById('beta-slider').addEventListener('input', function () {
+  state.beta = parseFloat(this.value);
+  document.getElementById('beta-val').textContent = state.beta.toFixed(2);
+});
+
+document.getElementById('beta2-slider').addEventListener('input', function () {
+  state.beta2 = parseFloat(this.value);
+  document.getElementById('beta2-val').textContent = state.beta2.toFixed(3);
+});
+
+document.getElementById('speed-slider').addEventListener('input', function () {
+  state.speed = parseInt(this.value);
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === ' ') { e.preventDefault(); startAnimation(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); stepOnce(); }
+  else if (e.key === 'r' || e.key === 'R') { e.preventDefault(); resetAll(); }
+});
+
+// ============================================================
+// INIT
+// ============================================================
+
+drawLandscape();
+drawConvergence();
+updateAll();
+</script>
+</body>
+</html>
