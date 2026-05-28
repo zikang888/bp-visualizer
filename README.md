@@ -144,3 +144,220 @@ MIT
 ---
 
 *本项目为教学演示用途，Transformer 模式的梯度数值基于启发式函数，优化器模式使用真实 MLP 模型的前向/反向传播计算。*
+
+---
+
+## 公式附录
+
+### 一、损失景观函数
+
+可视化中 2D 等高线图的损失曲面定义：
+
+$$
+L(x, y) = x^2 + 2y^2 + 0.5 \cdot \sin(3x) \cdot \cos(2y) + 0.3 \cdot \cos(4x) \cdot \sin(3y)
+$$
+
+梯度：
+
+$$
+\frac{\partial L}{\partial x} = 2x + 1.5 \cos(3x) \cos(2y) - 1.2 \sin(4x) \sin(3y)
+$$
+
+$$
+\frac{\partial L}{\partial y} = 4y - \sin(3x) \sin(2y) + 0.9 \cos(4x) \cos(3y)
+$$
+
+### 二、梯度下降与随机梯度下降
+
+**批梯度下降 (GD)**：
+
+$$
+\theta_{t+1} = \theta_t - \eta \nabla L(\theta_t)
+$$
+
+**随机梯度下降 (SGD)**：
+
+$$
+\theta_{t+1} = \theta_t - \eta \left( \nabla L(\theta_t) + \epsilon_t \right), \quad \epsilon_t \sim \mathcal{N}(0, \sigma^2)
+$$
+
+其中 $\eta$ 为学习率，SGD 在梯度上叠加随机噪声以模拟小批量采样的随机性。
+
+### 三、Transformer 反向传播 —— 链式法则逐层展开
+
+**反向传播顺序**（从 Loss 向 Embedding 逆向）：
+
+#### 1. Cross-Entropy Loss
+
+$$
+\frac{\partial \mathcal{L}}{\partial \hat{y}} = \mathrm{softmax}(\hat{y}) - y
+$$
+
+整个反向传播的起点，Loss 对输出 logits 的梯度。
+
+#### 2. Output Projection
+
+$$
+\frac{\partial \mathcal{L}}{\partial W_{\text{out}}} = z_2^{\top} \cdot \frac{\partial \mathcal{L}}{\partial \hat{y}}
+$$
+
+输出投影层的权重梯度，通过链式法则从上游梯度计算。
+
+#### 3. Add & LayerNorm₂
+
+$$
+\frac{\partial z_2}{\partial x_2} = \mathrm{LayerNorm}'(x_2 + \mathrm{FFN}(z_1))
+$$
+
+残差连接 + LayerNorm 层的梯度，同时分流至 FFN 输出和残差路径。
+
+#### 4. FFN (Linear)
+
+$$
+\frac{\partial \mathrm{FFN}}{\partial W_2} = h_1^{\top} \cdot \frac{\partial \mathcal{L}}{\partial \mathrm{FFN}}
+$$
+
+前馈网络第二层线性变换的权重梯度。
+
+#### 5. FFN (Linear + ReLU)
+
+$$
+\frac{\partial h_1}{\partial W_1} = z_1^{\top} \cdot \mathrm{ReLU}'(W_1 z_1) \odot \frac{\partial \mathcal{L}}{\partial h_1}
+$$
+
+ReLU 激活函数处部分神经元梯度为零（稀疏梯度），$\odot$ 表示逐元素乘法。
+
+#### 6. Add & LayerNorm₁
+
+$$
+\frac{\partial z_1}{\partial x_1} = \mathrm{LayerNorm}'(x_1 + \mathrm{Attn}(x))
+$$
+
+第一个残差+归一化层，梯度向 Attention 和残差路径分流。
+
+#### 7. Self-Attention
+
+$$
+\frac{\partial \mathrm{Attn}}{\partial W_o} = \mathrm{concat}(\mathrm{head}_i)^{\top} \cdot \frac{\partial \mathcal{L}}{\partial \mathrm{Attn}}
+$$
+
+多头注意力输出投影的梯度，softmax 产生平滑梯度分布。
+
+#### 8. Q/K/V 投影
+
+$$
+\frac{\partial Q}{\partial W_q}, \quad \frac{\partial K}{\partial W_k}, \quad \frac{\partial V}{\partial W_v}
+$$
+
+Q/K/V 三个投影矩阵的梯度分别通过注意力图回传。
+
+#### 9. Embedding
+
+$$
+\frac{\partial \mathcal{L}}{\partial E} = \sum \frac{\partial \mathcal{L}}{\partial x}
+$$
+
+嵌入层梯度，稀疏更新 — 仅被使用的 token 嵌入获得梯度。
+
+### 四、MLP 前向传播与反向传播
+
+**网络结构**：Input(2) → Hidden₁(4, ReLU) → Hidden₂(3, ReLU) → Output(1)
+
+#### 前向传播
+
+$$
+z^{(l)} = W^{(l)} a^{(l-1)} + b^{(l)}, \quad a^{(l)} = \mathrm{ReLU}(z^{(l)})
+$$
+
+最后一层不使用激活函数：$a^{(L)} = z^{(L)}$。
+
+#### MSE 损失
+
+$$
+\mathcal{L} = \frac{1}{2} \sum_{i} (a_i^{(L)} - y_i)^2
+$$
+
+#### 反向传播
+
+**输出层**：
+
+$$
+\delta^{(L)} = a^{(L)} - y
+$$
+
+$$
+\frac{\partial \mathcal{L}}{\partial W^{(l)}} = \delta^{(l)} \cdot (a^{(l-1)})^{\top}, \quad \frac{\partial \mathcal{L}}{\partial b^{(l)}} = \delta^{(l)}
+$$
+
+**链式法则（隐藏层）**：
+
+$$
+\delta^{(l)} = \left( (W^{(l+1)})^{\top} \cdot \delta^{(l+1)} \right) \odot \mathrm{ReLU}'(z^{(l)})
+$$
+
+其中 $\mathrm{ReLU}'(z) = \begin{cases} 1 & z > 0 \\ 0 & z \leq 0 \end{cases}$。
+
+### 五、Momentum 优化器
+
+**动量累积**：
+
+$$
+v_t = \beta \cdot v_{t-1} + \eta \cdot \nabla L(\theta_t)
+$$
+
+**参数更新**：
+
+$$
+\theta_{t+1} = \theta_t - v_t
+$$
+
+**参数说明**：
+- $\beta$：动量衰减系数（默认 0.9）
+- $\eta$：学习率（默认 0.3）
+- $v_t$：动量累积项，起始为 0
+
+Momentum 将历史梯度方向累积为速度矢量，使参数更新更平滑并加速收敛。
+
+### 六、Adam 优化器
+
+**一阶矩（动量）估计**：
+
+$$
+m_t = \beta_1 \cdot m_{t-1} + (1 - \beta_1) \cdot \nabla L(\theta_t)
+$$
+
+**二阶矩（方差）估计**：
+
+$$
+v_t = \beta_2 \cdot v_{t-1} + (1 - \beta_2) \cdot (\nabla L(\theta_t))^2
+$$
+
+**偏差校正**：
+
+$$
+\hat{m}_t = \frac{m_t}{1 - \beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1 - \beta_2^t}
+$$
+
+**参数更新**：
+
+$$
+\theta_{t+1} = \theta_t - \eta \cdot \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \varepsilon}
+$$
+
+**参数说明**：
+- $\beta_1$：一阶矩衰减系数（默认 0.9）
+- $\beta_2$：二阶矩衰减系数（默认 0.999）
+- $\varepsilon = 10^{-8}$：数值稳定小量
+- $\eta$：学习率（默认 0.3）
+
+Adam 结合了 Momentum 的动量思想与 RMSProp 的自适应学习率，通过二阶矩 $\hat{v}_t$ 对每个参数的自适应缩放，使不同层能够获得不同量级的更新步长。
+
+### 七、梯度范数计算
+
+用于可视化中柱状图的梯度度量：
+
+$$
+\|\nabla W^{(l)}\|_F = \sqrt{\sum_{i,j} \left(\frac{\partial \mathcal{L}}{\partial W_{ij}^{(l)}}\right)^2}
+$$
+
+即 Frobenius 范数，衡量每层梯度矩阵的整体大小，用于观察梯度从深层到浅层的衰减效应。
