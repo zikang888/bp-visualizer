@@ -596,15 +596,15 @@ function stopAll() {
 // ============================================================
 
 const LAYERS = [
-  { id: 'embed',    name: 'Embedding',        x: 20,  y: 220, w: 110, h: 40, color: '#4d90fe', gradNorm: 0 },
-  { id: 'qkv',      name: 'Q/K/V 投影',        x: 210, y: 90,  w: 110, h: 40, color: '#22d3ee', gradNorm: 0 },
-  { id: 'attn',     name: 'Self-Attention',   x: 210, y: 190, w: 110, h: 40, color: '#22d3ee', gradNorm: 0 },
-  { id: 'addnorm1', name: 'Add & LayerNorm',  x: 210, y: 330, w: 110, h: 40, color: '#34d399', gradNorm: 0 },
-  { id: 'ffn1',     name: 'FFN (Linear+ReLU)',x: 400, y: 140, w: 120, h: 40, color: '#a78bfa', gradNorm: 0 },
-  { id: 'ffn2',     name: 'FFN (Linear)',     x: 400, y: 240, w: 120, h: 40, color: '#a78bfa', gradNorm: 0 },
-  { id: 'addnorm2', name: 'Add & LayerNorm',  x: 400, y: 370, w: 120, h: 40, color: '#34d399', gradNorm: 0 },
-  { id: 'output',   name: 'Output Proj',      x: 600, y: 210, w: 110, h: 40, color: '#f472b6', gradNorm: 0 },
-  { id: 'loss',     name: 'Cross-Entropy Loss',x:600, y: 330, w: 130, h: 40, color: '#f87171', gradNorm: 0 },
+  { id: 'embed',    name: 'Embedding',        x: 20,  y: 220, w: 110, h: 40, color: '#4d90fe', gdGrad: 0, sgdGrad: 0 },
+  { id: 'qkv',      name: 'Q/K/V 投影',        x: 210, y: 90,  w: 110, h: 40, color: '#22d3ee', gdGrad: 0, sgdGrad: 0 },
+  { id: 'attn',     name: 'Self-Attention',   x: 210, y: 190, w: 110, h: 40, color: '#22d3ee', gdGrad: 0, sgdGrad: 0 },
+  { id: 'addnorm1', name: 'Add & LayerNorm',  x: 210, y: 330, w: 110, h: 40, color: '#34d399', gdGrad: 0, sgdGrad: 0 },
+  { id: 'ffn1',     name: 'FFN (Linear+ReLU)',x: 400, y: 140, w: 120, h: 40, color: '#a78bfa', gdGrad: 0, sgdGrad: 0 },
+  { id: 'ffn2',     name: 'FFN (Linear)',     x: 400, y: 240, w: 120, h: 40, color: '#a78bfa', gdGrad: 0, sgdGrad: 0 },
+  { id: 'addnorm2', name: 'Add & LayerNorm',  x: 400, y: 370, w: 120, h: 40, color: '#34d399', gdGrad: 0, sgdGrad: 0 },
+  { id: 'output',   name: 'Output Proj',      x: 600, y: 210, w: 110, h: 40, color: '#f472b6', gdGrad: 0, sgdGrad: 0 },
+  { id: 'loss',     name: 'Cross-Entropy Loss',x:600, y: 330, w: 130, h: 40, color: '#f87171', gdGrad: 0, sgdGrad: 0 },
 ];
 
 const EDGES = [
@@ -1022,24 +1022,29 @@ function updateLossLandscape() {
 function drawGradientChart() {
   gradientSvg.selectAll('*').remove();
   const W = 520, H = 255;
-  const margin = { top: 20, right: 30, bottom: 70, left: 50 };
+  const margin = { top: 20, right: 30, bottom: 70, left: 55 };
   const g = gradientSvg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
   const cw = W - margin.left - margin.right;
   const ch = H - margin.top - margin.bottom;
 
   const displayLayers = REVERSE_ORDER_DISPLAY;
-  const xScale = d3.scaleBand().domain(displayLayers).range([0, cw]).padding(0.25);
-  const maxVal = Math.max(0.1, d3.max(displayLayers.map(id => layerMap[id].gradNorm)) || 1);
+
+  const allGrads = [];
+  displayLayers.forEach(id => {
+    allGrads.push(layerMap[id].gdGrad || 0, layerMap[id].sgdGrad || 0);
+  });
+  const maxVal = Math.max(0.1, d3.max(allGrads) || 1);
+
+  const x0 = d3.scaleBand().domain(displayLayers).range([0, cw]).padding(0.25);
+  const x1 = d3.scaleBand().domain(['gd', 'sgd']).range([0, x0.bandwidth()]).padding(0.15);
   const yScale = d3.scaleLinear().domain([0, maxVal * 1.2]).range([ch, 0]);
 
   g.append('line').attr('x1', 0).attr('x2', cw).attr('y1', ch).attr('y2', ch)
     .attr('stroke', '#252b38').attr('stroke-width', 1);
-
   g.append('line').attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', ch)
     .attr('stroke', '#252b38').attr('stroke-width', 1);
 
   g.selectAll('.y-label').data(yScale.ticks(4)).join('text')
-    .attr('class', 'y-label')
     .attr('x', -8).attr('y', d => yScale(d) + 4)
     .attr('text-anchor', 'end')
     .attr('fill', '#5c6578').attr('font-size', '10')
@@ -1047,44 +1052,51 @@ function drawGradientChart() {
     .text(d => d.toFixed(2));
 
   g.selectAll('.y-grid').data(yScale.ticks(4)).join('line')
-    .attr('class', 'y-grid')
     .attr('x1', 0).attr('x2', cw)
     .attr('y1', d => yScale(d)).attr('y2', d => yScale(d))
     .attr('stroke', '#1e2333').attr('stroke-width', 0.5).attr('stroke-dasharray', '3,3');
 
+  // Legend
+  g.append('rect').attr('x', cw - 90).attr('y', -14).attr('width', 10).attr('height', 10)
+    .attr('rx', 2).attr('fill', '#4d90fe');
+  g.append('text').attr('x', cw - 76).attr('y', -5)
+    .attr('fill', '#4d90fe').attr('font-size', '10').text('GD');
+  g.append('rect').attr('x', cw - 42).attr('y', -14).attr('width', 10).attr('height', 10)
+    .attr('rx', 2).attr('fill', '#fb923c');
+  g.append('text').attr('x', cw - 28).attr('y', -5)
+    .attr('fill', '#fb923c').attr('font-size', '10').text('SGD');
+
+  // Grouped bars: GD + SGD per layer
   displayLayers.forEach(id => {
     const layer = layerMap[id];
-    const val = layer.gradNorm;
-    const barH = ch - yScale(Math.max(0.001, val));
-    const x = xScale(id);
-    const barW = xScale.bandwidth();
+    const gx = x0(id);
 
-    if (val > 0.01) {
+    [{ val: layer.gdGrad || 0, color: '#4d90fe', key: 'gd' },
+     { val: layer.sgdGrad || 0, color: '#fb923c', key: 'sgd' }].forEach(opt => {
+      const barX = gx + x1(opt.key);
+      const barW = x1.bandwidth();
+      const barH = Math.max(0, ch - yScale(Math.max(0.0001, opt.val)));
+      const barY = yScale(Math.max(0.0001, opt.val));
+
       g.append('rect')
-        .attr('x', x - 2).attr('y', yScale(val)).attr('width', barW + 4).attr('height', barH)
-        .attr('fill', layer.color).attr('opacity', 0.15).attr('rx', 4);
-    }
+        .attr('x', barX).attr('y', barY).attr('width', barW).attr('height', barH)
+        .attr('fill', opt.color).attr('opacity', 0.85).attr('rx', 2);
 
-    g.append('rect')
-      .attr('x', x).attr('y', yScale(Math.max(0.001, val))).attr('width', barW).attr('height', Math.max(0, barH))
-      .attr('fill', layer.color).attr('opacity', 0.85).attr('rx', 3)
-      .attr('id', `gradbar-${id}`);
-
-    g.append('text')
-      .attr('x', x + barW / 2).attr('y', yScale(Math.max(0.001, val)) - 8)
-      .attr('text-anchor', 'middle')
-      .attr('fill', layer.color).attr('font-size', '10')
-      .attr('font-family', 'JetBrains Mono, monospace').attr('font-weight', '500')
-      .attr('id', `gradval-${id}`)
-      .text(val > 0.001 ? val.toFixed(3) : '');
+      g.append('text')
+        .attr('x', barX + barW / 2).attr('y', barY - 5)
+        .attr('text-anchor', 'middle')
+        .attr('fill', opt.color).attr('font-size', '8')
+        .attr('font-family', 'JetBrains Mono, monospace')
+        .text(opt.val > 0.01 ? opt.val.toFixed(2) : '');
+    });
   });
 
+  // X-axis labels
   g.selectAll('.x-label').data(displayLayers).join('text')
-    .attr('class', 'x-label')
-    .attr('x', d => xScale(d) + xScale.bandwidth() / 2)
+    .attr('x', d => x0(d) + x0.bandwidth() / 2)
     .attr('y', ch + 10)
     .attr('text-anchor', 'end')
-    .attr('transform', d => `rotate(-38,${xScale(d) + xScale.bandwidth() / 2},${ch + 10})`)
+    .attr('transform', d => `rotate(-38,${x0(d) + x0.bandwidth() / 2},${ch + 10})`)
     .attr('fill', d => layerMap[d].color).attr('font-size', '9')
     .attr('font-family', 'Inter, sans-serif')
     .text(d => layerMap[d].name);
@@ -1099,7 +1111,7 @@ function drawGradientChart() {
   // --- Loss Comparison: GD vs SGD ---
   const lossTop = H + 5;
   const lossH = 130;
-  const lossMargin = { top: 18, right: 20, bottom: 28, left: 50 };
+  const lossMargin = { top: 18, right: 20, bottom: 28, left: 55 };
   const lossCw = cw;
   const lossCh = lossH - lossMargin.top - lossMargin.bottom;
 
@@ -1147,8 +1159,7 @@ function drawGradientChart() {
     const sgdLine = d3.line().x((d, i) => lossX(i)).y(d => lossY(d));
 
     lg.append('path').datum(gdLossArr).attr('d', gdLine)
-      .attr('fill', 'none').attr('stroke', '#4d90fe').attr('stroke-width', 2)
-      .attr('stroke-dasharray', 'none');
+      .attr('fill', 'none').attr('stroke', '#4d90fe').attr('stroke-width', 2);
 
     lg.append('path').datum(sgdLossArr).attr('d', sgdLine)
       .attr('fill', 'none').attr('stroke', '#fb923c').attr('stroke-width', 1.5)
@@ -1188,30 +1199,57 @@ function updateGradientChart() {
 // --- Transformer Simulation ---
 
 function computeGradients(epoch) {
-  const t = state.mode === 'sgd' ? epoch : epoch * 0.5;
-  const noise = state.mode === 'sgd' ? () => (Math.random() - 0.5) * 0.5 : () => 0;
+  const t = epoch * 0.5;
+  const noiseSgd = () => (Math.random() - 0.5) * 0.5;
 
-  const lossGrad = 1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8) + noise();
-  const outGrad = lossGrad * (0.85 + 0.05 * Math.sin(t));
-  const addnorm2Grad = outGrad * (0.75 + 0.1 * Math.cos(t * 0.5));
-  const ffn2Grad = addnorm2Grad * (0.7 + 0.05 * Math.sin(t * 1.2));
-  const ffn1Grad = ffn2Grad * (0.6 + 0.1 * Math.cos(t * 0.7));
-  const addnorm1Grad = ffn1Grad * (0.65 + 0.08 * Math.sin(t * 0.6));
-  const attnGrad = addnorm1Grad * (0.55 + 0.1 * Math.cos(t * 0.9));
-  const qkvGrad = attnGrad * (0.5 + 0.05 * Math.sin(t));
-  const embedGrad = qkvGrad * (0.4 + 0.08 * Math.cos(t * 0.4));
+  function layerChain(t, noise) {
+    const base = 1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8) + noise;
+    return {
+      loss: base,
+      output: base * (0.85 + 0.05 * Math.sin(t)),
+      addnorm2: base * (0.85 + 0.05 * Math.sin(t)) * (0.75 + 0.1 * Math.cos(t * 0.5)),
+      ffn2: base * (0.85 * 0.75 + 0.05 * Math.sin(t)) * (0.7 + 0.05) * 0.7,
+      ffn1: base * 0.85 * 0.75 * 0.7 * 0.6 * (0.7 + 0.05),
+      addnorm1: base * 0.85 * 0.75 * 0.7 * 0.6 * 0.65,
+      attn: base * 0.85 * 0.75 * 0.7 * 0.6 * 0.65 * 0.55,
+      qkv: base * 0.85 * 0.75 * 0.7 * 0.6 * 0.65 * 0.55 * 0.5,
+      embed: base * 0.85 * 0.75 * 0.7 * 0.6 * 0.65 * 0.55 * 0.5 * 0.4,
+    };
+  }
 
-  return {
-    loss: lossGrad, output: outGrad, addnorm2: addnorm2Grad,
-    ffn2: ffn2Grad, ffn1: ffn1Grad, addnorm1: addnorm1Grad,
-    attn: attnGrad, qkv: qkvGrad, embed: embedGrad,
+  const gdGrads = {
+    loss: 1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8),
+    output: (1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8)) * (0.85 + 0.05 * Math.sin(t)),
+    addnorm2: (1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8)) * (0.85 + 0.05 * Math.sin(t)) * (0.75 + 0.1 * Math.cos(t * 0.5)),
+    ffn2: (1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8)) * (0.85 + 0.05 * Math.sin(t)) * (0.75 + 0.1 * Math.cos(t * 0.5)) * (0.7 + 0.05 * Math.sin(t * 1.2)),
+    ffn1: (1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8)) * (0.85 + 0.05 * Math.sin(t)) * (0.75 + 0.1 * Math.cos(t * 0.5)) * (0.7 + 0.05 * Math.sin(t * 1.2)) * (0.6 + 0.1 * Math.cos(t * 0.7)),
+    addnorm1: (1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8)) * (0.85 + 0.05 * Math.sin(t)) * (0.75 + 0.1 * Math.cos(t * 0.5)) * (0.7 + 0.05 * Math.sin(t * 1.2)) * (0.6 + 0.1 * Math.cos(t * 0.7)) * (0.65 + 0.08 * Math.sin(t * 0.6)),
+    attn: (1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8)) * (0.85 + 0.05 * Math.sin(t)) * (0.75 + 0.1 * Math.cos(t * 0.5)) * (0.7 + 0.05 * Math.sin(t * 1.2)) * (0.6 + 0.1 * Math.cos(t * 0.7)) * (0.65 + 0.08 * Math.sin(t * 0.6)) * (0.55 + 0.1 * Math.cos(t * 0.9)),
+    qkv: (1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8)) * (0.85 + 0.05 * Math.sin(t)) * (0.75 + 0.1 * Math.cos(t * 0.5)) * (0.7 + 0.05 * Math.sin(t * 1.2)) * (0.6 + 0.1 * Math.cos(t * 0.7)) * (0.65 + 0.08 * Math.sin(t * 0.6)) * (0.55 + 0.1 * Math.cos(t * 0.9)) * (0.5 + 0.05 * Math.sin(t)),
+    embed: (1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8)) * (0.85 + 0.05 * Math.sin(t)) * (0.75 + 0.1 * Math.cos(t * 0.5)) * (0.7 + 0.05 * Math.sin(t * 1.2)) * (0.6 + 0.1 * Math.cos(t * 0.7)) * (0.65 + 0.08 * Math.sin(t * 0.6)) * (0.55 + 0.1 * Math.cos(t * 0.9)) * (0.5 + 0.05 * Math.sin(t)) * (0.4 + 0.08 * Math.cos(t * 0.4)),
   };
+
+  const ts = epoch;
+  const sgdGrads = {
+    loss: 1.8 + Math.exp(-ts * 0.4) * 3 + 0.3 * Math.sin(ts * 0.8) + (Math.random() - 0.5) * 0.5,
+    output: gdGrads.output + (Math.random() - 0.5) * 0.4,
+    addnorm2: gdGrads.addnorm2 + (Math.random() - 0.5) * 0.35,
+    ffn2: gdGrads.ffn2 + (Math.random() - 0.5) * 0.3,
+    ffn1: gdGrads.ffn1 + (Math.random() - 0.5) * 0.28,
+    addnorm1: gdGrads.addnorm1 + (Math.random() - 0.5) * 0.25,
+    attn: gdGrads.attn + (Math.random() - 0.5) * 0.22,
+    qkv: gdGrads.qkv + (Math.random() - 0.5) * 0.18,
+    embed: gdGrads.embed + (Math.random() - 0.5) * 0.12,
+  };
+
+  return { gd: gdGrads, sgd: sgdGrads };
 }
 
 function runOneStep(epoch) {
   const grads = computeGradients(epoch);
   REVERSE_ORDER.forEach(id => {
-    layerMap[id].gradNorm = grads[id];
+    layerMap[id].gdGrad = grads.gd[id];
+    layerMap[id].sgdGrad = grads.sgd[id];
   });
 
   if (state.gdPath.length === 0) {
@@ -1333,33 +1371,37 @@ function updateDetailPanel(layerId, epoch) {
   const badge = document.getElementById('layer-badge');
   badge.textContent = layer.name;
 
+  const grads = computeGradients(epoch);
+  const gdVal = layer.gdGrad || grads.gd[layerId];
+  const sgdVal = layer.sgdGrad || grads.sgd[layerId];
+
   const formulas = {
     loss: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathcal{L}}{\\partial \\hat{y}} = \\mathrm{softmax}(\\hat{y}) - y$</div>
-<span class="grad">$\\nabla \\mathcal{L} = ${(layer.gradNorm || computeGradients(epoch).loss).toFixed(4)}$</span>
+<span class="grad">GD: $\\nabla \\mathcal{L} = ${gdVal.toFixed(4)}$</span>&nbsp;&nbsp;<span style="color:#fb923c;">SGD: $\\nabla = ${sgdVal.toFixed(4)}$</span>
 <div class="formula-desc">损失函数对输出 logits 的梯度，是整个反向传播的起点</div>`,
     output: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathcal{L}}{\\partial W_{\\text{out}}} = z_2^{\\top} \\cdot \\frac{\\partial \\mathcal{L}}{\\partial \\hat{y}}$</div>
-<span class="grad">$\\nabla W_{\\text{out}} = ${(layer.gradNorm || computeGradients(epoch).output).toFixed(4)}$</span>
+<span class="grad">GD: $\\nabla W_{\\text{out}} = ${gdVal.toFixed(4)}$</span>&nbsp;&nbsp;<span style="color:#fb923c;">SGD: $\\nabla = ${sgdVal.toFixed(4)}$</span>
 <div class="formula-desc">输出投影层的权重梯度，通过链式法则从上游梯度计算</div>`,
     addnorm2: `<div class="formula-main">$\\displaystyle \\frac{\\partial z_2}{\\partial x_2} = \\mathrm{LayerNorm}'(x_2 + \\mathrm{FFN}(z_1))$</div>
-<span class="grad">$\\nabla = ${(layer.gradNorm || computeGradients(epoch).addnorm2).toFixed(4)}$</span>
+<span class="grad">GD: $\\nabla = ${gdVal.toFixed(4)}$</span>&nbsp;&nbsp;<span style="color:#fb923c;">SGD: $\\nabla = ${sgdVal.toFixed(4)}$</span>
 <div class="formula-desc">残差连接 + LayerNorm：梯度分流至 FFN 输出和残差路径</div>`,
     ffn2: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathrm{FFN}}{\\partial W_2} = h_1^{\\top} \\cdot \\frac{\\partial \\mathcal{L}}{\\partial \\mathrm{FFN}}$</div>
-<span class="grad">$\\nabla W_2 = ${(layer.gradNorm || computeGradients(epoch).ffn2).toFixed(4)}$</span>
+<span class="grad">GD: $\\nabla W_2 = ${gdVal.toFixed(4)}$</span>&nbsp;&nbsp;<span style="color:#fb923c;">SGD: $\\nabla = ${sgdVal.toFixed(4)}$</span>
 <div class="formula-desc">前馈网络第二层线性变换的权重梯度</div>`,
     ffn1: `<div class="formula-main">$\\displaystyle \\frac{\\partial h_1}{\\partial W_1} = z_1^{\\top} \\cdot \\mathrm{ReLU}'(W_1 z_1) \\odot \\frac{\\partial \\mathcal{L}}{\\partial h_1}$</div>
-<span class="grad">$\\nabla W_1 = ${(layer.gradNorm || computeGradients(epoch).ffn1).toFixed(4)}$</span>
+<span class="grad">GD: $\\nabla W_1 = ${gdVal.toFixed(4)}$</span>&nbsp;&nbsp;<span style="color:#fb923c;">SGD: $\\nabla = ${sgdVal.toFixed(4)}$</span>
 <div class="formula-desc">ReLU 激活函数处部分神经元梯度为零（稀疏梯度）</div>`,
     addnorm1: `<div class="formula-main">$\\displaystyle \\frac{\\partial z_1}{\\partial x_1} = \\mathrm{LayerNorm}'(x_1 + \\mathrm{Attn}(x))$</div>
-<span class="grad">$\\nabla = ${(layer.gradNorm || computeGradients(epoch).addnorm1).toFixed(4)}$</span>
+<span class="grad">GD: $\\nabla = ${gdVal.toFixed(4)}$</span>&nbsp;&nbsp;<span style="color:#fb923c;">SGD: $\\nabla = ${sgdVal.toFixed(4)}$</span>
 <div class="formula-desc">第一个残差+归一化层，梯度向 Attention 和残差路径分流</div>`,
     attn: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathrm{Attn}}{\\partial W_o} = \\mathrm{concat}(\\mathrm{head}_i)^{\\top} \\cdot \\frac{\\partial \\mathcal{L}}{\\partial \\mathrm{Attn}}$</div>
-<span class="grad">$\\nabla W_o = ${(layer.gradNorm || computeGradients(epoch).attn).toFixed(4)}$</span>
+<span class="grad">GD: $\\nabla W_o = ${gdVal.toFixed(4)}$</span>&nbsp;&nbsp;<span style="color:#fb923c;">SGD: $\\nabla = ${sgdVal.toFixed(4)}$</span>
 <div class="formula-desc">多头注意力输出投影的梯度，softmax 产生平滑梯度分布</div>`,
     qkv: `<div class="formula-main">$\\displaystyle \\frac{\\partial Q}{\\partial W_q},\\; \\frac{\\partial K}{\\partial W_k},\\; \\frac{\\partial V}{\\partial W_v}$</div>
-<span class="grad">$\\nabla = ${(layer.gradNorm || computeGradients(epoch).qkv).toFixed(4)}$</span>
+<span class="grad">GD: $\\nabla = ${gdVal.toFixed(4)}$</span>&nbsp;&nbsp;<span style="color:#fb923c;">SGD: $\\nabla = ${sgdVal.toFixed(4)}$</span>
 <div class="formula-desc">Q/K/V 三个投影矩阵的梯度分别通过注意力图回传</div>`,
     embed: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathcal{L}}{\\partial E} = \\sum \\frac{\\partial \\mathcal{L}}{\\partial x}$（仅更新输入 token 对应行）</div>
-<span class="grad">$\\nabla E = ${(layer.gradNorm || computeGradients(epoch).embed).toFixed(4)}$</span>
+<span class="grad">GD: $\\nabla E = ${gdVal.toFixed(4)}$</span>&nbsp;&nbsp;<span style="color:#fb923c;">SGD: $\\nabla = ${sgdVal.toFixed(4)}$</span>
 <div class="formula-desc">嵌入层梯度，稀疏更新 — 仅被使用的 token 嵌入获得梯度</div>`,
   };
 
@@ -1374,7 +1416,7 @@ function updateDetailPanel(layerId, epoch) {
   const sgdLoss = state.sgdLosses.length ? state.sgdLosses[state.sgdLosses.length-1] : 0;
   infoRow.innerHTML = `
     <div class="info-chip">epoch <span class="val">${epoch}</span></div>
-    <div class="info-chip">‖∇<span class="val">${layerMap[layerId].gradNorm.toFixed(4)}</span></div>
+    <div class="info-chip">‖∇<span class="val">${(layer.gdGrad || 0).toFixed(4)}</span></div>
     <div class="info-chip">η <span class="val">${state.tfLr.toFixed(2)}</span></div>
     <div class="info-chip">GD Loss <span class="val" style="color:var(--accent-blue)">${gdLoss.toFixed(4)}</span></div>
     <div class="info-chip">SGD Loss <span class="val" style="color:var(--accent-orange)">${sgdLoss.toFixed(4)}</span></div>
@@ -1387,8 +1429,9 @@ function updateAllVisuals() {
 
   document.getElementById('loss-badge').textContent = `GD: ${state.gdLosses.length ? state.gdLosses[state.gdLosses.length-1].toFixed(4) : '—'}  SGD: ${state.sgdLosses.length ? state.sgdLosses[state.sgdLosses.length-1].toFixed(4) : '—'}`;
 
-  const maxGrad = Math.max(...REVERSE_ORDER.map(id => layerMap[id].gradNorm));
-  document.getElementById('grad-norm-badge').textContent = `‖∇‖ₘₐₓ = ${maxGrad.toFixed(4)}`;
+  const maxGd = Math.max(...REVERSE_ORDER.map(id => layerMap[id].gdGrad || 0));
+  const maxSgd = Math.max(...REVERSE_ORDER.map(id => layerMap[id].sgdGrad || 0));
+  document.getElementById('grad-norm-badge').textContent = `GD ‖∇‖ₘₐₓ = ${maxGd.toFixed(4)}  SGD ‖∇‖ₘₐₓ = ${maxSgd.toFixed(4)}`;
 
   const phaseBadge = document.getElementById('phase-badge');
   if (state.running || state.reverseIndex >= 0) {
@@ -1491,7 +1534,8 @@ function resetAll() {
   state.currentLoss = 0;
 
   REVERSE_ORDER.forEach(id => {
-    layerMap[id].gradNorm = 0;
+    layerMap[id].gdGrad = 0;
+    layerMap[id].sgdGrad = 0;
   });
 
   LAYERS.forEach(l => {
@@ -2207,7 +2251,8 @@ function showTooltip(evt, layer) {
   tooltip.style.left = (evt.pageX + 12) + 'px';
   tooltip.style.top = (evt.pageY - 30) + 'px';
   tooltip.innerHTML = `<strong>${layer.name}</strong><br>
-    <span style="color:${layer.color}">‖∇‖ = ${layer.gradNorm.toFixed(4)}</span>`;
+    <span style="color:var(--accent-blue)">GD ‖∇‖ = ${(layer.gdGrad || 0).toFixed(4)}</span><br>
+    <span style="color:var(--accent-orange)">SGD ‖∇‖ = ${(layer.sgdGrad || 0).toFixed(4)}</span>`;
 }
 
 function hideTooltip() {
@@ -2306,7 +2351,8 @@ function init() {
   resetOptModel();
 
   REVERSE_ORDER.forEach(id => {
-    layerMap[id].gradNorm = 0;
+    layerMap[id].gdGrad = 0;
+    layerMap[id].sgdGrad = 0;
   });
 
   updateStepIndicator();
