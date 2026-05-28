@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>反向传播算法可视化 — Transformer 架构梯度传播演示</title>
+<script>
+MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$']],
+  },
+  options: { enableMenu: false },
+};
+</script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg-primary: #0b0e14;
+    --bg-secondary: #12161f;
+    --bg-card: #181c26;
+    --bg-elevated: #1e2333;
+    --border: #252b38;
+    --border-accent: #323b4c;
+    --text-primary: #e4e8f0;
+    --text-secondary: #8b95a8;
+    --text-tertiary: #5c6578;
+    --accent-blue: #4d90fe;
+    --accent-cyan: #22d3ee;
+    --accent-purple: #a78bfa;
+    --accent-green: #34d399;
+    --accent-orange: #fb923c;
+    --accent-red: #f87171;
+    --accent-pink: #f472b6;
+    --grad-start: #4d90fe;
+    --grad-end: #f472b6;
+    --grad-attn: #22d3ee;
+    --grad-ffn: #a78bfa;
+    --grad-norm: #34d399;
+    --shad-sm: 0 1px 2px rgba(0,0,0,0.3);
+    --shad-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shad-lg: 0 8px 30px rgba(0,0,0,0.5);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  .header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .header-title h1 {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header-title .subtitle {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 2px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    padding: 8px 18px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border-accent);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    transition: all 0.2s;
+    font-family: 'Inter', sans-serif;
+    white-space: nowrap;
+  }
+
+  .btn:hover { background: var(--border-accent); border-color: var(--text-tertiary); }
+  .btn:active { transform: scale(0.97); }
+
+  .btn-primary {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #fff;
+  }
+  .btn-primary:hover { background: #3a7de8; border-color: #3a7de8; }
+
+  .btn-warn {
+    background: var(--accent-orange);
+    border-color: var(--accent-orange);
+    color: #fff;
+  }
+  .btn-warn:hover { background: #e8801a; border-color: #e8801a; }
+
+  .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
+
+  .btn-group {
+    display: flex;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border-accent);
+  }
+  .btn-group .btn {
+    border-radius: 0;
+    border: none;
+    border-right: 1px solid var(--border-accent);
+  }
+  .btn-group .btn:last-child { border-right: none; }
+  .btn-group .btn.active {
+    background: var(--accent-blue);
+    color: #fff;
+  }
+
+  .main-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 16px;
+    padding: 20px 24px;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 1100px) {
+    .main-container { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .panel-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .panel-badge {
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+    background: rgba(77,144,254,0.15);
+    color: var(--accent-blue);
+  }
+  .panel-badge.warn { background: rgba(251,146,60,0.15); color: var(--accent-orange); }
+  .panel-badge.green { background: rgba(52,211,153,0.15); color: var(--accent-green); }
+
+  #arch-panel { grid-row: span 2; }
+
+  #loss-panel { }
+  #gradient-panel { }
+  #detail-panel { }
+
+  .arch-svg { width: 100%; height: 100%; min-height: 520px; }
+  .loss-canvas { width: 100%; height: 100%; min-height: 280px; border-radius: var(--radius-sm); }
+  .gradient-svg { width: 100%; height: 100%; min-height: 280px; }
+
+  .info-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+
+  .info-chip {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .info-chip .val { color: var(--accent-cyan); font-weight: 500; }
+
+  .formula-box {
+    margin-top: 12px;
+    padding: 14px 18px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--accent-purple);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 2.2;
+  }
+
+  .formula-box mjx-container {
+    font-size: 0.9rem !important;
+  }
+
+  .formula-box .formula-main {
+    color: var(--text-primary);
+  }
+
+  .formula-box .formula-desc {
+    display: block;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    line-height: 1.6;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .formula-box .highlight { color: var(--accent-orange); }
+  .formula-box .grad { color: var(--accent-pink); }
+
+  .slider-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+
+  .slider-group input[type="range"] {
+    -webkit-appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-accent);
+    outline: none;
+  }
+  .slider-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    cursor: pointer;
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.73rem;
+    color: var(--text-tertiary);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .step-indicator {
+    display: flex;
+    gap: 4px;
+    margin-top: 10px;
+  }
+  .step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border-accent);
+    transition: all 0.3s;
+  }
+  .step-dot.active { background: var(--accent-blue); box-shadow: 0 0 8px var(--accent-blue); }
+  .step-dot.done { background: var(--accent-green); }
+
+  .tooltip {
+    position: absolute;
+    padding: 8px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 10;
+    color: var(--text-primary);
+    box-shadow: var(--shad-md);
+    white-space: nowrap;
+  }
+
+  .footer {
+    padding: 16px 24px;
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    border-top: 1px solid var(--border);
+  }
+
+  select.btn {
+    appearance: none;
+    padding-right: 28px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b95a8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .pulse { animation: pulse 1.5s infinite; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">
+    <h1>反向传播算法 · 梯度逐层传播</h1>
+    <div class="subtitle">Backpropagation through Transformer Architecture</div>
+  </div>
+  <div class="controls">
+    <div class="btn-group" id="mode-group">
+      <button class="btn active" data-mode="gd">梯度下降 GD</button>
+      <button class="btn" data-mode="sgd">随机梯度下降 SGD</button>
+    </div>
+    <div class="slider-group">
+      <span>η =</span>
+      <input type="range" id="lr-slider" min="0.01" max="0.5" step="0.01" value="0.1" style="width:80px;">
+      <span id="lr-val" style="font-family:'JetBrains Mono',monospace;min-width:36px;">0.10</span>
+    </div>
+    <button class="btn btn-primary" id="btn-play">▶ 开始传播</button>
+    <button class="btn" id="btn-step">⏭ 单步</button>
+    <button class="btn btn-warn" id="btn-reset">↺ 重置</button>
+    <div class="slider-group">
+      <span>速度</span>
+      <input type="range" id="speed-slider" min="1" max="5" step="1" value="2" style="width:60px;">
+    </div>
+  </div>
+</div>
+
+<div class="main-container">
+  <div class="panel" id="arch-panel">
+    <div class="panel-header">
+      <span class="panel-title">Transformer 架构 · 梯度传播</span>
+      <span class="panel-badge" id="phase-badge">就绪</span>
+    </div>
+    <svg id="arch-svg" class="arch-svg" viewBox="0 0 760 480" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="step-indicator" id="step-indicator"></div>
+  </div>
+
+  <div class="panel" id="loss-panel">
+    <div class="panel-header">
+      <span class="panel-title">损失景观 · 优化轨迹</span>
+      <span class="panel-badge" id="loss-badge">Loss = —</span>
+    </div>
+    <canvas id="loss-canvas" class="loss-canvas" width="560" height="280"></canvas>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-blue);"></span>梯度下降 GD</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-orange);"></span>随机梯度下降 SGD</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-green);"></span>全局最优</div>
+    </div>
+  </div>
+
+  <div class="panel" id="gradient-panel">
+    <div class="panel-header">
+      <span class="panel-title">梯度范数 · 逐层变化</span>
+      <span class="panel-badge green" id="grad-norm-badge">‖∇‖ = —</span>
+    </div>
+    <svg id="gradient-svg" class="gradient-svg" viewBox="0 0 560 310" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+
+  <div class="panel" id="detail-panel">
+    <div class="panel-header">
+      <span class="panel-title">当前层 · 梯度计算细节</span>
+      <span class="panel-badge warn" id="layer-badge">—</span>
+    </div>
+    <div class="formula-box" id="formula-display">
+      <span style="color:var(--text-tertiary);">点击「开始传播」或「单步」查看梯度计算过程</span>
+    </div>
+    <div class="info-row" id="info-row"></div>
+  </div>
+</div>
+
+<div class="footer">
+  Transformer Backpropagation Visualizer · 基于链式法则的逐层梯度传播演示 · 教学用途
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ============================================================
+// CONSTANTS & STATE
+// ============================================================
+
+const LAYERS = [
+  { id: 'embed',    name: 'Embedding',        x: 20,  y: 220, w: 110, h: 40, color: '#4d90fe', gradNorm: 0 },
+  { id: 'qkv',      name: 'Q/K/V 投影',        x: 210, y: 90,  w: 110, h: 40, color: '#22d3ee', gradNorm: 0 },
+  { id: 'attn',     name: 'Self-Attention',   x: 210, y: 190, w: 110, h: 40, color: '#22d3ee', gradNorm: 0 },
+  { id: 'addnorm1', name: 'Add & LayerNorm',  x: 210, y: 330, w: 110, h: 40, color: '#34d399', gradNorm: 0 },
+  { id: 'ffn1',     name: 'FFN (Linear+ReLU)',x: 400, y: 140, w: 120, h: 40, color: '#a78bfa', gradNorm: 0 },
+  { id: 'ffn2',     name: 'FFN (Linear)',     x: 400, y: 240, w: 120, h: 40, color: '#a78bfa', gradNorm: 0 },
+  { id: 'addnorm2', name: 'Add & LayerNorm',  x: 400, y: 370, w: 120, h: 40, color: '#34d399', gradNorm: 0 },
+  { id: 'output',   name: 'Output Proj',      x: 600, y: 210, w: 110, h: 40, color: '#f472b6', gradNorm: 0 },
+  { id: 'loss',     name: 'Cross-Entropy Loss',x:600, y: 330, w: 130, h: 40, color: '#f87171', gradNorm: 0 },
+];
+
+const EDGES = [
+  { from: 'embed',    to: 'qkv',       label: '' },
+  { from: 'qkv',      to: 'attn',      label: 'Q,K,V' },
+  { from: 'attn',     to: 'addnorm1',  label: '' },
+  { from: 'embed',    to: 'addnorm1',  label: '残差', skip: true },
+  { from: 'addnorm1', to: 'ffn1',      label: '' },
+  { from: 'ffn1',     to: 'ffn2',      label: '' },
+  { from: 'ffn2',     to: 'addnorm2',  label: '' },
+  { from: 'addnorm1', to: 'addnorm2',  label: '残差', skip: true },
+  { from: 'addnorm2', to: 'output',    label: '' },
+  { from: 'output',   to: 'loss',      label: '' },
+];
+
+const REVERSE_ORDER = ['loss','output','addnorm2','ffn2','ffn1','addnorm1','attn','qkv','embed'];
+const REVERSE_ORDER_DISPLAY = ['loss','output','addnorm2','ffn2','ffn1','addnorm1','attn','qkv','embed'];
+
+const layerMap = {};
+LAYERS.forEach(l => layerMap[l.id] = l);
+
+let state = {
+  mode: 'gd',
+  lr: 0.1,
+  speed: 2,
+  running: false,
+  reverseIndex: -1,
+  epoch: 0,
+  gdPath: [],
+  sgdPath: [],
+  gdLoss: [],
+  sgdLoss: [],
+  currentLoss: 0,
+  animationTimer: null,
+  maxEpochs: 40,
+};
+
+// ============================================================
+// DOM REFS
+// ============================================================
+
+const archSvg = d3.select('#arch-svg');
+const gradientSvg = d3.select('#gradient-svg');
+const lossCanvas = document.getElementById('loss-canvas');
+const lossCtx = lossCanvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+
+// ============================================================
+// ARCHITECTURE DIAGRAM
+// ============================================================
+
+function drawArchitecture() {
+  archSvg.selectAll('*').remove();
+  const g = archSvg.append('g');
+
+  // Arrow defs
+  const defs = archSvg.append('defs');
+  defs.append('marker')
+    .attr('id', 'arrowhead')
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', 9).attr('refY', 5)
+    .attr('markerWidth', 6).attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', '#323b4c');
+
+  defs.append('marker')
+    .attr('id', 'arrowhead-back')
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', 9).attr('refY', 5)
+    .attr('markerWidth', 6).attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', '#f87171');
+
+  // Block background boxes
+  const blocks = [
+    { x: 195, y: 60,  w: 140, h: 330, label: 'Attention Block',    color: 'rgba(34,211,238,0.04)' },
+    { x: 385, y: 110, w: 150, h: 320, label: 'FFN Block',          color: 'rgba(167,139,250,0.04)' },
+  ];
+  blocks.forEach(b => {
+    g.append('rect')
+      .attr('x', b.x).attr('y', b.y).attr('width', b.w).attr('height', b.h)
+      .attr('rx', 8).attr('fill', b.color).attr('stroke', 'rgba(255,255,255,0.04)').attr('stroke-width', 1);
+    g.append('text')
+      .attr('x', b.x + b.w / 2).attr('y', b.y + b.h - 12)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#3a4055').attr('font-size', '10')
+      .attr('font-family', 'Inter, sans-serif').attr('font-weight', '500').attr('letter-spacing', '1')
+      .text(b.label);
+  });
+
+  // Column headers
+  const headers = [
+    { x: 75,  y: 195, text: '输入层' },
+    { x: 265, y: 52,  text: '注意力子层' },
+    { x: 460, y: 52,  text: '前馈子层' },
+    { x: 665, y: 185, text: '输出层' },
+  ];
+  headers.forEach(h => {
+    g.append('text')
+      .attr('x', h.x).attr('y', h.y)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#4a5068').attr('font-size', '11')
+      .attr('font-family', 'Noto Serif SC, serif').attr('font-weight', '600')
+      .text(h.text);
+  });
+
+  // Draw edges
+  EDGES.forEach(e => {
+    const from = layerMap[e.from];
+    const to = layerMap[e.to];
+    const x1 = from.x + from.w;
+    const y1 = from.y + from.h / 2;
+    const x2 = to.x;
+    const y2 = to.y + to.h / 2;
+
+    let pathData;
+    if (e.skip) {
+      // Residual skip connection — route around the outside (bottom)
+      const botY = Math.max(from.y + from.h, to.y + to.h) + 25;
+      pathData = [
+        `M ${x1} ${y1}`,
+        `L ${x1 + 12} ${y1}`,
+        `C ${x1 + 30} ${y1}, ${x1 + 20} ${botY}, ${(x1 + x2) / 2} ${botY}`,
+        `C ${x2 - 20} ${botY}, ${x2 - 30} ${y2}, ${x2 - 12} ${y2}`,
+        `L ${x2} ${y2}`,
+      ].join(' ');
+    } else if (from.x + from.w >= to.x - 10) {
+      // Same column — vertical line with slight curve
+      const midY = (y1 + y2) / 2;
+      pathData = [
+        `M ${x1} ${y1}`,
+        `C ${x1 + 20} ${y1}, ${x1 + 20} ${y2}, ${x2} ${y2}`,
+      ].join(' ');
+    } else {
+      // Cross-column — smooth horizontal curve
+      const midX = (x1 + x2) / 2;
+      pathData = [
+        `M ${x1} ${y1}`,
+        `C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`,
+      ].join(' ');
+    }
+
+    const pathEl = g.append('path')
+      .attr('d', pathData)
+      .attr('fill', 'none')
+      .attr('stroke', e.skip ? '#2a3040' : '#252b38')
+      .attr('stroke-width', e.skip ? 1.2 : 1.5)
+      .attr('stroke-dasharray', e.skip ? '6,5' : 'none')
+      .attr('id', `edge-${e.from}-${e.to}`);
+
+    if (!e.skip) {
+      pathEl.attr('marker-end', 'url(#arrowhead)');
+    }
+
+    if (e.label) {
+      const midX = (x1 + x2) / 2;
+      const midY = e.skip ? Math.max(from.y + from.h, to.y + to.h) + 25 : (y1 + y2) / 2;
+      g.append('text')
+        .attr('x', midX).attr('y', e.skip ? midY - 8 : midY - 8)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#4a5068').attr('font-size', '9')
+        .attr('font-family', 'JetBrains Mono, monospace')
+        .text(e.label);
+    }
+  });
+
+  // Draw nodes
+  LAYERS.forEach(l => {
+    const nodeG = g.append('g')
+      .attr('transform', `translate(${l.x},${l.y})`)
+      .attr('id', `node-${l.id}`)
+      .style('cursor', 'pointer')
+      .on('mouseenter', (evt) => showTooltip(evt, l))
+      .on('mouseleave', hideTooltip);
+
+    // Shadow rect
+    nodeG.append('rect')
+      .attr('width', l.w).attr('height', l.h)
+      .attr('rx', 6).attr('fill', l.color)
+      .attr('opacity', 0.06).attr('x', 1).attr('y', 1);
+
+    // Main rect
+    nodeG.append('rect')
+      .attr('class', 'layer-rect')
+      .attr('width', l.w).attr('height', l.h)
+      .attr('rx', 6).attr('fill', '#151922')
+      .attr('stroke', l.color).attr('stroke-width', 1.5)
+      .attr('stroke-opacity', 0.6);
+
+    // Label
+    nodeG.append('text')
+      .attr('x', l.w / 2).attr('y', l.h / 2 + 5)
+      .attr('text-anchor', 'middle')
+      .attr('fill', l.color).attr('font-size', '11')
+      .attr('font-family', 'Inter, sans-serif').attr('font-weight', '500')
+      .text(l.name);
+
+    // Small icon dot
+    nodeG.append('circle')
+      .attr('cx', 12).attr('cy', l.h / 2)
+      .attr('r', 3.5).attr('fill', l.color).attr('opacity', 0.9);
+  });
+
+  // Loss node special style
+  archSvg.select('#node-loss .layer-rect').attr('stroke-dasharray', '5,4');
+
+  // Phase label
+  g.append('text')
+    .attr('x', 735).attr('y', 24)
+    .attr('text-anchor', 'end')
+    .attr('fill', '#4a5068').attr('font-size', '12')
+    .attr('font-family', 'JetBrains Mono, monospace')
+    .attr('id', 'phase-label-arch')
+    .text('FORWARD PASS →');
+
+  // Flow direction arrows between columns
+  const flowArrows = [
+    { x1: 130, y1: 240, x2: 210, y2: 240 },
+    { x1: 320, y1: 260, x2: 400, y2: 260 },
+    { x1: 520, y1: 270, x2: 600, y2: 270 },
+  ];
+  flowArrows.forEach(fa => {
+    g.append('line')
+      .attr('x1', fa.x1).attr('y1', fa.y1).attr('x2', fa.x2).attr('y2', fa.y2)
+      .attr('stroke', '#2a3040').attr('stroke-width', 1).attr('stroke-dasharray', '3,3')
+      .attr('marker-end', 'url(#arrowhead)');
+  });
+}
+
+function highlightNode(layerId, intensity) {
+  const node = archSvg.select(`#node-${layerId} .layer-rect`);
+  const layer = layerMap[layerId];
+  const alpha = 0.4 + intensity * 0.6;
+  node.transition().duration(300)
+    .attr('fill', layer.color)
+    .attr('fill-opacity', alpha * 0.25)
+    .attr('stroke-opacity', alpha)
+    .attr('stroke-width', 1.5 + intensity * 2);
+}
+
+function highlightEdge(fromId, toId, intensity, isBackward) {
+  const edge = archSvg.select(`#edge-${fromId}-${toId}`);
+  if (edge.empty()) return;
+  edge.transition().duration(300)
+    .attr('stroke', isBackward ? '#f87171' : '#fbbf24')
+    .attr('stroke-width', 1.5 + intensity * 3)
+    .attr('stroke-opacity', 0.3 + intensity * 0.7);
+}
+
+function animateGradientPulse(layerId) {
+  const node = archSvg.select(`#node-${layerId}`);
+  const rect = node.select('.layer-rect');
+  rect.attr('stroke', '#f87171')
+    .attr('stroke-width', 3)
+    .attr('stroke-opacity', 1)
+    .transition().duration(600)
+    .attr('stroke-width', 1.5)
+    .attr('stroke-opacity', 0.6)
+    .attr('stroke', layerMap[layerId].color);
+}
+
+// ============================================================
+// LOSS LANDSCAPE (Canvas)
+// ============================================================
+
+function colormap(t) {
+  t = Math.max(0, Math.min(1, t));
+  if (t < 0.2) {
+    const s = t / 0.2;
+    return [Math.floor(5 + s * 10), Math.floor(18 + s * 35), Math.floor(35 + s * 20)];
+  } else if (t < 0.45) {
+    const s = (t - 0.2) / 0.25;
+    return [Math.floor(15 + s * 15), Math.floor(53 + s * 25), Math.floor(55 - s * 30)];
+  } else if (t < 0.7) {
+    const s = (t - 0.45) / 0.25;
+    return [Math.floor(30 + s * 55), Math.floor(78 - s * 30), Math.floor(25 - s * 12)];
+  } else {
+    const s = (t - 0.7) / 0.3;
+    return [Math.floor(85 + s * 85), Math.floor(48 - s * 20), Math.floor(13 + s * 5)];
+  }
+}
+
+function drawLossLandscape() {
+  const W = lossCanvas.width;
+  const H = lossCanvas.height;
+  lossCtx.clearRect(0, 0, W, H);
+
+  // Compute loss range
+  let minZ = Infinity, maxZ = -Infinity;
+  const lossGrid = new Float32Array(W * H);
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const x = (px / W - 0.5) * 4;
+      const y = -(py / H - 0.5) * 4;
+      const z = lossFn(x, y);
+      lossGrid[py * W + px] = z;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+  }
+
+  // Render heatmap
+  const imageData = lossCtx.createImageData(W, H);
+  const range = maxZ - minZ || 1;
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const z = lossGrid[py * W + px];
+      const t = (z - minZ) / range;
+      const [r, g, b] = colormap(t);
+      const idx = (py * W + px) * 4;
+      imageData.data[idx] = r;
+      imageData.data[idx + 1] = g;
+      imageData.data[idx + 2] = b;
+      imageData.data[idx + 3] = 255;
+    }
+  }
+  lossCtx.putImageData(imageData, 0, 0);
+
+  // Draw contour lines using marching-squares-like approach
+  const step = 3;
+  const levels = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8];
+
+  levels.forEach(level => {
+    const isMajor = (level % 2 === 0);
+    lossCtx.strokeStyle = isMajor ? 'rgba(180,190,210,0.35)' : 'rgba(140,150,170,0.18)';
+    lossCtx.lineWidth = isMajor ? 1.2 : 0.6;
+    lossCtx.beginPath();
+
+    for (let py = 0; py < H - step; py += step) {
+      for (let px = 0; px < W - step; px += step) {
+        const z00 = lossGrid[py * W + px];
+        const z10 = lossGrid[py * W + px + step];
+        const z01 = lossGrid[(py + step) * W + px];
+        const z11 = lossGrid[(py + step) * W + px + step];
+
+        const corners = [z00, z10, z11, z01];
+        let above = 0;
+        for (let c = 0; c < 4; c++) if (corners[c] >= level) above++;
+
+        if (above === 0 || above === 4) continue;
+
+        // Find edge crossings
+        const pts = [];
+        const cx = [px, px + step, px + step, px];
+        const cy = [py, py, py + step, py + step];
+        const nx = [px + step, px + step, px, px];
+        const ny = [py, py + step, py + step, py];
+
+        for (let e = 0; e < 4; e++) {
+          const a = corners[e];
+          const b = corners[(e + 1) % 4];
+          if ((a >= level && b < level) || (a < level && b >= level)) {
+            const t = (level - a) / (b - a);
+            pts.push({
+              x: cx[e] + (nx[e] - cx[e]) * t,
+              y: cy[e] + (ny[e] - cy[e]) * t,
+            });
+          }
+        }
+
+        if (pts.length >= 2) {
+          lossCtx.moveTo(pts[0].x, pts[0].y);
+          lossCtx.lineTo(pts[1].x, pts[1].y);
+        }
+      }
+    }
+    lossCtx.stroke();
+  });
+
+  // Axis labels
+  lossCtx.fillStyle = '#4a5068';
+  lossCtx.font = '10px Inter, sans-serif';
+  lossCtx.textAlign = 'center';
+  lossCtx.fillText('w₁', W / 2, H - 4);
+  lossCtx.textAlign = 'left';
+  lossCtx.fillText('w₂', 6, 16);
+
+  // Global minimum marker
+  const gx = 0, gy = 0;
+  const sx = (gx / 4 + 0.5) * W;
+  const sy = (-gy / 4 + 0.5) * H;
+  lossCtx.fillStyle = '#34d399';
+  lossCtx.beginPath();
+  lossCtx.arc(sx, sy, 6, 0, Math.PI * 2);
+  lossCtx.fill();
+  lossCtx.shadowColor = '#34d399';
+  lossCtx.shadowBlur = 12;
+  lossCtx.fillStyle = 'rgba(52,211,153,0.35)';
+  lossCtx.beginPath();
+  lossCtx.arc(sx, sy, 9, 0, Math.PI * 2);
+  lossCtx.fill();
+  lossCtx.shadowBlur = 0;
+}
+
+function lossFn(x, y) {
+  const x2 = x * x;
+  const y2 = y * y;
+  return x2 + 2 * y2 + 0.5 * Math.sin(3 * x) * Math.cos(2 * y) + 0.3 * Math.cos(4 * x) * Math.sin(3 * y);
+}
+
+function lossGrad(x, y) {
+  const dx = 2 * x + 1.5 * Math.cos(3 * x) * Math.cos(2 * y) - 1.2 * Math.sin(4 * x) * Math.sin(3 * y);
+  const dy = 4 * y - Math.sin(3 * x) * Math.sin(2 * y) + 0.9 * Math.cos(4 * x) * Math.cos(3 * y);
+  return { dx, dy };
+}
+
+function drawPath(ctx, path, color, alpha) {
+  if (path.length < 2) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  const W = lossCanvas.width, H = lossCanvas.height;
+  ctx.moveTo(
+    (path[0].x / 4 + 0.5) * W,
+    (-path[0].y / 4 + 0.5) * H
+  );
+  for (let i = 1; i < path.length; i++) {
+    ctx.lineTo(
+      (path[i].x / 4 + 0.5) * W,
+      (-path[i].y / 4 + 0.5) * H
+    );
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Draw points
+  path.forEach((p, i) => {
+    const px = (p.x / 4 + 0.5) * W;
+    const py = (-p.y / 4 + 0.5) * H;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = alpha * (0.3 + 0.7 * i / Math.max(1, path.length - 1));
+    ctx.beginPath();
+    ctx.arc(px, py, i === path.length - 1 ? 4 : 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function updateLossLandscape() {
+  drawLossLandscape();
+  if (state.gdPath.length > 0) {
+    drawPath(lossCtx, state.gdPath, '#4d90fe', 0.9);
+  }
+  if (state.sgdPath.length > 0) {
+    drawPath(lossCtx, state.sgdPath, '#fb923c', 0.9);
+  }
+
+  // Current position highlight
+  const activePath = state.mode === 'gd' ? state.gdPath : state.sgdPath;
+  if (activePath.length > 0) {
+    const last = activePath[activePath.length - 1];
+    const W = lossCanvas.width, H = lossCanvas.height;
+    const px = (last.x / 4 + 0.5) * W;
+    const py = (-last.y / 4 + 0.5) * H;
+    lossCtx.fillStyle = state.mode === 'gd' ? '#4d90fe' : '#fb923c';
+    lossCtx.beginPath();
+    lossCtx.arc(px, py, 6, 0, Math.PI * 2);
+    lossCtx.fill();
+    lossCtx.strokeStyle = '#fff';
+    lossCtx.lineWidth = 1.5;
+    lossCtx.stroke();
+  }
+}
+
+// ============================================================
+// GRADIENT NORM CHART
+// ============================================================
+
+function drawGradientChart() {
+  gradientSvg.selectAll('*').remove();
+  const W = 520, H = 240;
+  const margin = { top: 20, right: 30, bottom: 70, left: 50 };
+  const g = gradientSvg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+  const cw = W - margin.left - margin.right;
+  const ch = H - margin.top - margin.bottom;
+
+  const displayLayers = REVERSE_ORDER_DISPLAY;
+  const xScale = d3.scaleBand().domain(displayLayers).range([0, cw]).padding(0.25);
+  const maxVal = Math.max(0.1, d3.max(displayLayers.map(id => layerMap[id].gradNorm)) || 1);
+  const yScale = d3.scaleLinear().domain([0, maxVal * 1.2]).range([ch, 0]);
+
+  // Axes
+  g.append('line').attr('x1', 0).attr('x2', cw).attr('y1', ch).attr('y2', ch)
+    .attr('stroke', '#252b38').attr('stroke-width', 1);
+
+  g.append('line').attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', ch)
+    .attr('stroke', '#252b38').attr('stroke-width', 1);
+
+  // Y axis labels
+  g.selectAll('.y-label').data(yScale.ticks(4)).join('text')
+    .attr('class', 'y-label')
+    .attr('x', -8).attr('y', d => yScale(d) + 4)
+    .attr('text-anchor', 'end')
+    .attr('fill', '#5c6578').attr('font-size', '10')
+    .attr('font-family', 'JetBrains Mono, monospace')
+    .text(d => d.toFixed(2));
+
+  // Y axis grid
+  g.selectAll('.y-grid').data(yScale.ticks(4)).join('line')
+    .attr('class', 'y-grid')
+    .attr('x1', 0).attr('x2', cw)
+    .attr('y1', d => yScale(d)).attr('y2', d => yScale(d))
+    .attr('stroke', '#1e2333').attr('stroke-width', 0.5).attr('stroke-dasharray', '3,3');
+
+  // Bars
+  displayLayers.forEach(id => {
+    const layer = layerMap[id];
+    const val = layer.gradNorm;
+    const barH = ch - yScale(Math.max(0.001, val));
+    const x = xScale(id);
+    const barW = xScale.bandwidth();
+
+    // Glow
+    if (val > 0.01) {
+      g.append('rect')
+        .attr('x', x - 2).attr('y', yScale(val)).attr('width', barW + 4).attr('height', barH)
+        .attr('fill', layer.color).attr('opacity', 0.15).attr('rx', 4);
+    }
+
+    g.append('rect')
+      .attr('x', x).attr('y', yScale(Math.max(0.001, val))).attr('width', barW).attr('height', Math.max(0, barH))
+      .attr('fill', layer.color).attr('opacity', 0.85).attr('rx', 3)
+      .attr('id', `gradbar-${id}`);
+
+    // Value label
+    g.append('text')
+      .attr('x', x + barW / 2).attr('y', yScale(Math.max(0.001, val)) - 8)
+      .attr('text-anchor', 'middle')
+      .attr('fill', layer.color).attr('font-size', '10')
+      .attr('font-family', 'JetBrains Mono, monospace').attr('font-weight', '500')
+      .attr('id', `gradval-${id}`)
+      .text(val > 0.001 ? val.toFixed(3) : '');
+  });
+
+  // X labels — rotated to avoid overlap
+  g.selectAll('.x-label').data(displayLayers).join('text')
+    .attr('class', 'x-label')
+    .attr('x', d => xScale(d) + xScale.bandwidth() / 2)
+    .attr('y', ch + 10)
+    .attr('text-anchor', 'end')
+    .attr('transform', d => `rotate(-38,${xScale(d) + xScale.bandwidth() / 2},${ch + 10})`)
+    .attr('fill', d => layerMap[d].color).attr('font-size', '9')
+    .attr('font-family', 'Inter, sans-serif')
+    .text(d => layerMap[d].name);
+
+  // Title
+  g.append('text')
+    .attr('x', cw / 2).attr('y', -2)
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#5c6578').attr('font-size', '9')
+    .attr('font-family', 'Inter, sans-serif')
+    .text('反向传播顺序 →');
+}
+
+function updateGradientChart() {
+  drawGradientChart();
+}
+
+// ============================================================
+// SIMULATION LOGIC
+// ============================================================
+
+function computeGradients(epoch) {
+  // Simulate layer-wise gradient computation with realistic Transformer behavior
+  const t = state.mode === 'sgd' ? epoch : epoch * 0.5;
+  const noise = state.mode === 'sgd' ? () => (Math.random() - 0.5) * 0.5 : () => 0;
+
+  // Loss gradient (∂L/∂logits) — starts strongest
+  const lossGrad = 1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8) + noise();
+
+  // Output projection
+  const outGrad = lossGrad * (0.85 + 0.05 * Math.sin(t));
+
+  // Add & Norm 2
+  const addnorm2Grad = outGrad * (0.75 + 0.1 * Math.cos(t * 0.5));
+
+  // FFN2 (second linear)
+  const ffn2Grad = addnorm2Grad * (0.7 + 0.05 * Math.sin(t * 1.2));
+
+  // FFN1 (first linear + ReLU) — ReLU backward: some zeros
+  const ffn1Grad = ffn2Grad * (0.6 + 0.1 * Math.cos(t * 0.7));
+
+  // Add & Norm 1
+  const addnorm1Grad = ffn1Grad * (0.65 + 0.08 * Math.sin(t * 0.6));
+
+  // Attention — complex gradient due to softmax
+  const attnGrad = addnorm1Grad * (0.55 + 0.1 * Math.cos(t * 0.9));
+
+  // QKV projection
+  const qkvGrad = attnGrad * (0.5 + 0.05 * Math.sin(t));
+
+  // Embedding — gradient is smallest but still significant
+  const embedGrad = qkvGrad * (0.4 + 0.08 * Math.cos(t * 0.4));
+
+  return {
+    loss: lossGrad,
+    output: outGrad,
+    addnorm2: addnorm2Grad,
+    ffn2: ffn2Grad,
+    ffn1: ffn1Grad,
+    addnorm1: addnorm1Grad,
+    attn: attnGrad,
+    qkv: qkvGrad,
+    embed: embedGrad,
+  };
+}
+
+function runOneStep(epoch) {
+  const grads = computeGradients(epoch);
+  REVERSE_ORDER.forEach(id => {
+    layerMap[id].gradNorm = grads[id];
+  });
+
+  // Update loss landscape path
+  if (state.gdPath.length === 0) {
+    state.gdPath.push({ x: -1.8, y: 1.2 });
+    state.sgdPath.push({ x: -1.8, y: 1.2 });
+  }
+
+  const lastGd = state.gdPath[state.gdPath.length - 1];
+  const lastSgd = state.sgdPath[state.sgdPath.length - 1];
+
+  const gradGd = lossGrad(lastGd.x, lastGd.y);
+  const lrGd = state.lr * 0.5;
+  const gdNext = {
+    x: lastGd.x - lrGd * gradGd.dx,
+    y: lastGd.y - lrGd * gradGd.dy,
+  };
+
+  const gradSgd = lossGrad(lastSgd.x, lastSgd.y);
+  const noiseScale = 0.3;
+  const sgdx = lastSgd.x - state.lr * (gradSgd.dx + (Math.random() - 0.5) * noiseScale);
+  const sgdy = lastSgd.y - state.lr * (gradSgd.dy + (Math.random() - 0.5) * noiseScale);
+
+  if (state.mode === 'gd') {
+    state.gdPath.push(gdNext);
+    state.sgdPath.push({ x: sgdx, y: sgdy });
+  } else {
+    const lastGd2 = state.gdPath[state.gdPath.length - 1];
+    const gradGd2 = lossGrad(lastGd2.x, lastGd2.y);
+    state.gdPath.push({
+      x: lastGd2.x - lrGd * gradGd2.dx,
+      y: lastGd2.y - lrGd * gradGd2.dy,
+    });
+    state.sgdPath.push({ x: sgdx, y: sgdy });
+  }
+
+  const activePath = state.mode === 'gd' ? state.gdPath : state.sgdPath;
+  const last = activePath[activePath.length - 1];
+  state.currentLoss = lossFn(last.x, last.y);
+  state.epoch = epoch;
+}
+
+// ============================================================
+// ANIMATION CONTROLS
+// ============================================================
+
+function getSpeedMs() {
+  const speeds = [1200, 800, 500, 300, 180];
+  return speeds[state.speed - 1] || 500;
+}
+
+function animateBackprop(epoch) {
+  if (epoch > state.maxEpochs) {
+    stopAnimation();
+    return;
+  }
+
+  state.reverseIndex = 0;
+  const speedMs = getSpeedMs();
+
+  function stepLayer() {
+    if (state.reverseIndex >= REVERSE_ORDER.length) {
+      // All layers done for this epoch
+      setTimeout(() => {
+        runOneStep(epoch);
+        updateAllVisuals();
+        if (state.running) {
+          animateBackprop(epoch + 1);
+        }
+      }, speedMs * 0.5);
+      return;
+    }
+
+    const layerId = REVERSE_ORDER[state.reverseIndex];
+    highlightNode(layerId, 1);
+    animateGradientPulse(layerId);
+
+    // Highlight incoming edges to this layer
+    EDGES.forEach(e => {
+      if (e.to === layerId) {
+        highlightEdge(e.from, e.to, 0.7, true);
+      }
+    });
+
+    updateDetailPanel(layerId, epoch);
+    updateStepIndicator();
+
+    state.reverseIndex++;
+
+    setTimeout(() => {
+      if (state.reverseIndex < REVERSE_ORDER.length) {
+        const prevLayerId = REVERSE_ORDER[state.reverseIndex - 1];
+        highlightNode(prevLayerId, 0.3);
+        EDGES.forEach(e => {
+          if (e.to === prevLayerId) {
+            highlightEdge(e.from, e.to, 0.15, false);
+          }
+        });
+      }
+      stepLayer();
+    }, speedMs);
+  }
+
+  stepLayer();
+}
+
+function updateStepIndicator() {
+  const container = document.getElementById('step-indicator');
+  container.innerHTML = '';
+  REVERSE_ORDER.forEach((id, i) => {
+    const dot = document.createElement('span');
+    dot.className = 'step-dot';
+    if (i < state.reverseIndex) dot.classList.add('done');
+    if (i === state.reverseIndex && state.reverseIndex < REVERSE_ORDER.length) dot.classList.add('active');
+    container.appendChild(dot);
+  });
+}
+
+function updateDetailPanel(layerId, epoch) {
+  const layer = layerMap[layerId];
+  const display = document.getElementById('formula-display');
+  const badge = document.getElementById('layer-badge');
+  badge.textContent = layer.name;
+
+  const formulas = {
+    loss: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathcal{L}}{\\partial \\hat{y}} = \\mathrm{softmax}(\\hat{y}) - y$</div>
+<span class="grad">$\\nabla \\mathcal{L} = ${(layer.gradNorm || computeGradients(epoch).loss).toFixed(4)}$</span>
+<div class="formula-desc">损失函数对输出 logits 的梯度，是整个反向传播的起点</div>`,
+    output: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathcal{L}}{\\partial W_{\\text{out}}} = z_2^{\\top} \\cdot \\frac{\\partial \\mathcal{L}}{\\partial \\hat{y}}$</div>
+<span class="grad">$\\nabla W_{\\text{out}} = ${(layer.gradNorm || computeGradients(epoch).output).toFixed(4)}$</span>
+<div class="formula-desc">输出投影层的权重梯度，通过链式法则从上游梯度计算</div>`,
+    addnorm2: `<div class="formula-main">$\\displaystyle \\frac{\\partial z_2}{\\partial x_2} = \\mathrm{LayerNorm}'(x_2 + \\mathrm{FFN}(z_1))$</div>
+<span class="grad">$\\nabla = ${(layer.gradNorm || computeGradients(epoch).addnorm2).toFixed(4)}$</span>
+<div class="formula-desc">残差连接 + LayerNorm：梯度分流至 FFN 输出和残差路径</div>`,
+    ffn2: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathrm{FFN}}{\\partial W_2} = h_1^{\\top} \\cdot \\frac{\\partial \\mathcal{L}}{\\partial \\mathrm{FFN}}$</div>
+<span class="grad">$\\nabla W_2 = ${(layer.gradNorm || computeGradients(epoch).ffn2).toFixed(4)}$</span>
+<div class="formula-desc">前馈网络第二层线性变换的权重梯度</div>`,
+    ffn1: `<div class="formula-main">$\\displaystyle \\frac{\\partial h_1}{\\partial W_1} = z_1^{\\top} \\cdot \\mathrm{ReLU}'(W_1 z_1) \\odot \\frac{\\partial \\mathcal{L}}{\\partial h_1}$</div>
+<span class="grad">$\\nabla W_1 = ${(layer.gradNorm || computeGradients(epoch).ffn1).toFixed(4)}$</span>
+<div class="formula-desc">ReLU 激活函数处部分神经元梯度为零（稀疏梯度）</div>`,
+    addnorm1: `<div class="formula-main">$\\displaystyle \\frac{\\partial z_1}{\\partial x_1} = \\mathrm{LayerNorm}'(x_1 + \\mathrm{Attn}(x))$</div>
+<span class="grad">$\\nabla = ${(layer.gradNorm || computeGradients(epoch).addnorm1).toFixed(4)}$</span>
+<div class="formula-desc">第一个残差+归一化层，梯度向 Attention 和残差路径分流</div>`,
+    attn: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathrm{Attn}}{\\partial W_o} = \\mathrm{concat}(\\mathrm{head}_i)^{\\top} \\cdot \\frac{\\partial \\mathcal{L}}{\\partial \\mathrm{Attn}}$</div>
+<span class="grad">$\\nabla W_o = ${(layer.gradNorm || computeGradients(epoch).attn).toFixed(4)}$</span>
+<div class="formula-desc">多头注意力输出投影的梯度，softmax 产生平滑梯度分布</div>`,
+    qkv: `<div class="formula-main">$\\displaystyle \\frac{\\partial Q}{\\partial W_q},\\; \\frac{\\partial K}{\\partial W_k},\\; \\frac{\\partial V}{\\partial W_v}$</div>
+<span class="grad">$\\nabla = ${(layer.gradNorm || computeGradients(epoch).qkv).toFixed(4)}$</span>
+<div class="formula-desc">Q/K/V 三个投影矩阵的梯度分别通过注意力图回传</div>`,
+    embed: `<div class="formula-main">$\\displaystyle \\frac{\\partial \\mathcal{L}}{\\partial E} = \\sum \\frac{\\partial \\mathcal{L}}{\\partial x}$（仅更新输入 token 对应行）</div>
+<span class="grad">$\\nabla E = ${(layer.gradNorm || computeGradients(epoch).embed).toFixed(4)}$</span>
+<div class="formula-desc">嵌入层梯度，稀疏更新 — 仅被使用的 token 嵌入获得梯度</div>`,
+  };
+
+  display.innerHTML = formulas[layerId] || '—';
+
+  if (window.MathJax && MathJax.typesetPromise) {
+    MathJax.typesetPromise([display]).catch(console.warn);
+  }
+
+  // Update info row
+  const infoRow = document.getElementById('info-row');
+  infoRow.innerHTML = `
+    <div class="info-chip">epoch <span class="val">${epoch}</span></div>
+    <div class="info-chip">‖∇<span class="val">${layerMap[layerId].gradNorm.toFixed(4)}</span></div>
+    <div class="info-chip">η <span class="val">${state.lr.toFixed(2)}</span></div>
+    <div class="info-chip">模式 <span class="val">${state.mode.toUpperCase()}</span></div>
+  `;
+}
+
+function updateAllVisuals() {
+  updateLossLandscape();
+  updateGradientChart();
+
+  // Update loss badge
+  document.getElementById('loss-badge').textContent = `Loss = ${state.currentLoss.toFixed(4)}`;
+
+  // Update grad norm badge
+  const maxGrad = Math.max(...REVERSE_ORDER.map(id => layerMap[id].gradNorm));
+  document.getElementById('grad-norm-badge').textContent = `‖∇‖ₘₐₓ = ${maxGrad.toFixed(4)}`;
+
+  // Update phase badge
+  const phaseBadge = document.getElementById('phase-badge');
+  if (state.running || state.reverseIndex >= 0) {
+    phaseBadge.textContent = '反向传播中';
+    phaseBadge.className = 'panel-badge warn';
+  } else {
+    phaseBadge.textContent = '就绪';
+    phaseBadge.className = 'panel-badge';
+  }
+
+  // Update phase label in arch
+  const phaseLabel = archSvg.select('#phase-label-arch');
+  if (phaseLabel.size() === 0) {
+    archSvg.append('text')
+      .attr('x', 735).attr('y', 24)
+      .attr('text-anchor', 'end')
+      .attr('fill', '#4a5068')
+      .attr('font-size', '12')
+      .attr('font-family', 'JetBrains Mono, monospace')
+      .attr('id', 'phase-label-arch')
+      .text(state.running || state.reverseIndex >= 0 ? 'BACKWARD PASS ←' : 'FORWARD PASS →');
+  } else {
+    phaseLabel.text(state.running || state.reverseIndex >= 0 ? 'BACKWARD PASS ←' : 'FORWARD PASS →');
+  }
+
+  updateStepIndicator();
+}
+
+function stopAnimation() {
+  state.running = false;
+  document.getElementById('btn-play').textContent = '▶ 开始传播';
+  updateAllVisuals();
+}
+
+function startAnimation() {
+  if (state.running) {
+    stopAnimation();
+    return;
+  }
+
+  state.running = true;
+  document.getElementById('btn-play').textContent = '⏸ 停止';
+  document.getElementById('phase-badge').textContent = '反向传播中';
+  document.getElementById('phase-badge').className = 'panel-badge warn';
+
+  animateBackprop(state.epoch + 1);
+}
+
+function stepOnce() {
+  if (state.running) return;
+
+  const epoch = state.epoch + 1;
+  state.epoch = epoch;
+  runOneStep(epoch);
+
+  // Animate all layers backward in sequence
+  state.reverseIndex = 0;
+  const speedMs = 150;
+
+  function stepLayer() {
+    if (state.reverseIndex >= REVERSE_ORDER.length) {
+      updateAllVisuals();
+      return;
+    }
+
+    const layerId = REVERSE_ORDER[state.reverseIndex];
+    highlightNode(layerId, 1);
+    animateGradientPulse(layerId);
+    EDGES.forEach(e => {
+      if (e.to === layerId) highlightEdge(e.from, e.to, 0.7, true);
+    });
+    updateDetailPanel(layerId, epoch);
+    updateStepIndicator();
+    state.reverseIndex++;
+
+    setTimeout(() => {
+      if (state.reverseIndex < REVERSE_ORDER.length) {
+        const prevLayerId = REVERSE_ORDER[state.reverseIndex - 1];
+        highlightNode(prevLayerId, 0.3);
+        EDGES.forEach(e => {
+          if (e.to === prevLayerId) highlightEdge(e.from, e.to, 0.15, false);
+        });
+      }
+      stepLayer();
+    }, speedMs);
+  }
+
+  stepLayer();
+}
+
+function resetAll() {
+  stopAnimation();
+  state.reverseIndex = -1;
+  state.epoch = 0;
+  state.gdPath = [];
+  state.sgdPath = [];
+  state.currentLoss = 0;
+
+  REVERSE_ORDER.forEach(id => {
+    layerMap[id].gradNorm = 0;
+  });
+
+  // Reset all nodes
+  LAYERS.forEach(l => {
+    const node = archSvg.select(`#node-${l.id} .layer-rect`);
+    node.transition().duration(300)
+      .attr('fill', '#151922')
+      .attr('stroke', l.color)
+      .attr('stroke-width', 1.5)
+      .attr('stroke-opacity', 0.6)
+      .attr('fill-opacity', 1);
+  });
+
+  // Reset all edges
+  EDGES.forEach(e => {
+    const edge = archSvg.select(`#edge-${e.from}-${e.to}`);
+    edge.transition().duration(300)
+      .attr('stroke', '#252b38')
+      .attr('stroke-width', 1.5)
+      .attr('stroke-opacity', 1);
+  });
+
+  document.getElementById('loss-badge').textContent = 'Loss = —';
+  document.getElementById('grad-norm-badge').textContent = '‖∇‖ = —';
+  document.getElementById('phase-badge').textContent = '就绪';
+  document.getElementById('phase-badge').className = 'panel-badge';
+  document.getElementById('layer-badge').textContent = '—';
+  document.getElementById('formula-display').innerHTML =
+    '<span style="color:var(--text-tertiary);">点击「开始传播」或「单步」查看梯度计算过程</span>';
+  document.getElementById('info-row').innerHTML = '';
+  document.getElementById('step-indicator').innerHTML = '';
+
+  const phaseLabel = archSvg.select('#phase-label-arch');
+  if (phaseLabel.size() > 0) phaseLabel.text('FORWARD PASS →');
+
+  updateAllVisuals();
+}
+
+// ============================================================
+// TOOLTIP
+// ============================================================
+
+function showTooltip(evt, layer) {
+  tooltip.style.opacity = '1';
+  tooltip.style.left = (evt.pageX + 12) + 'px';
+  tooltip.style.top = (evt.pageY - 30) + 'px';
+  tooltip.innerHTML = `<strong>${layer.name}</strong><br>
+    <span style="color:${layer.color}">‖∇‖ = ${layer.gradNorm.toFixed(4)}</span>`;
+}
+
+function hideTooltip() {
+  tooltip.style.opacity = '0';
+}
+
+// ============================================================
+// EVENT HANDLERS
+// ============================================================
+
+document.getElementById('btn-play').addEventListener('click', startAnimation);
+document.getElementById('btn-step').addEventListener('click', stepOnce);
+document.getElementById('btn-reset').addEventListener('click', resetAll);
+
+document.getElementById('lr-slider').addEventListener('input', function() {
+  state.lr = parseFloat(this.value);
+  document.getElementById('lr-val').textContent = state.lr.toFixed(2);
+});
+
+document.getElementById('speed-slider').addEventListener('input', function() {
+  state.speed = parseInt(this.value);
+});
+
+document.querySelectorAll('#mode-group .btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('#mode-group .btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    state.mode = this.dataset.mode;
+    if (state.epoch === 0) {
+      // Reset paths on mode switch
+      state.gdPath = [];
+      state.sgdPath = [];
+      updateLossLandscape();
+    }
+  });
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+  if (e.key === ' ') {
+    e.preventDefault();
+    startAnimation();
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    stepOnce();
+  } else if (e.key === 'r' || e.key === 'R') {
+    e.preventDefault();
+    resetAll();
+  }
+});
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+
+function init() {
+  drawArchitecture();
+  drawLossLandscape();
+  drawGradientChart();
+
+  // Add some initial steps to populate the chart
+  REVERSE_ORDER.forEach(id => {
+    layerMap[id].gradNorm = 0;
+  });
+
+  updateStepIndicator();
+
+  // Keyboard shortcuts hint
+  document.getElementById('formula-display').innerHTML =
+    '<span style="color:var(--text-tertiary);">快捷键: <b style="color:var(--accent-cyan);">Space</b> 开始/停止 &nbsp; <b style="color:var(--accent-cyan);">→</b> 单步 &nbsp; <b style="color:var(--accent-cyan);">R</b> 重置<br>点击「开始传播」或「单步」查看梯度计算过程</span>';
+}
+
+init();
+</script>
+</body>
+</html>
