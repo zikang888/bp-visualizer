@@ -393,8 +393,8 @@ MathJax = {
     <div class="ctrl-group hidden" id="ctrl-optimizer">
       <div class="slider-group">
         <span>η =</span>
-        <input type="range" id="opt-lr-slider" min="0.01" max="0.5" step="0.01" value="0.1" style="width:65px;">
-        <span id="opt-lr-val" style="font-family:'JetBrains Mono',monospace;min-width:32px;">0.10</span>
+        <input type="range" id="opt-lr-slider" min="0.01" max="0.5" step="0.01" value="0.3" style="width:65px;">
+        <span id="opt-lr-val" style="font-family:'JetBrains Mono',monospace;min-width:32px;">0.30</span>
       </div>
       <div class="slider-group">
         <span>β =</span>
@@ -487,7 +487,7 @@ let state = {
   maxEpochs: 40,
 
   // --- Optimizer state ---
-  optLr: 0.1,
+  optLr: 0.3,
   optBeta: 0.9,
   optBeta2: 0.999,
   optIteration: 0,
@@ -850,8 +850,8 @@ function drawLossLandscape() {
   const lossGrid = new Float32Array(W * H);
   for (let py = 0; py < H; py++) {
     for (let px = 0; px < W; px++) {
-      const x = (px / W - 0.5) * 5;
-      const y = -(py / H - 0.5) * 5;
+      const x = (px / W - 0.5) * 7;
+      const y = -(py / H - 0.5) * 7;
       const z = lossFn(x, y);
       lossGrid[py * W + px] = z;
       if (z < minZ) minZ = z;
@@ -932,8 +932,8 @@ function drawLossLandscape() {
   lossCtx.fillText('w₂', 6, 16);
 
   const gx = 0, gy = 0;
-  const sx = (gx / 5 + 0.5) * W;
-  const sy = (-gy / 5 + 0.5) * H;
+  const sx = (gx / 7 + 0.5) * W;
+  const sy = (-gy / 7 + 0.5) * H;
   lossCtx.fillStyle = '#34d399';
   lossCtx.beginPath();
   lossCtx.arc(sx, sy, 6, 0, Math.PI * 2);
@@ -967,21 +967,21 @@ function drawPath(ctx, path, color, alpha) {
   ctx.beginPath();
   const W = lossCanvas.width, H = lossCanvas.height;
   ctx.moveTo(
-    (path[0].x / 5 + 0.5) * W,
-    (-path[0].y / 5 + 0.5) * H
+    (path[0].x / 7 + 0.5) * W,
+    (-path[0].y / 7 + 0.5) * H
   );
   for (let i = 1; i < path.length; i++) {
     ctx.lineTo(
-      (path[i].x / 5 + 0.5) * W,
-      (-path[i].y / 5 + 0.5) * H
+      (path[i].x / 7 + 0.5) * W,
+      (-path[i].y / 7 + 0.5) * H
     );
   }
   ctx.stroke();
   ctx.globalAlpha = 1;
 
   path.forEach((p, i) => {
-    const px = (p.x / 5 + 0.5) * W;
-    const py = (-p.y / 5 + 0.5) * H;
+    const px = (p.x / 7 + 0.5) * W;
+    const py = (-p.y / 7 + 0.5) * H;
     ctx.fillStyle = color;
     ctx.globalAlpha = alpha * (0.3 + 0.7 * i / Math.max(1, path.length - 1));
     ctx.beginPath();
@@ -1003,8 +1003,8 @@ function updateLossLandscape() {
   if (state.gdPath.length > 0) {
     const lastGd = state.gdPath[state.gdPath.length - 1];
     const W = lossCanvas.width, H = lossCanvas.height;
-    const pxGd = (lastGd.x / 5 + 0.5) * W;
-    const pyGd = (-lastGd.y / 5 + 0.5) * H;
+    const pxGd = (lastGd.x / 7 + 0.5) * W;
+    const pyGd = (-lastGd.y / 7 + 0.5) * H;
     lossCtx.fillStyle = '#4d90fe';
     lossCtx.beginPath();
     lossCtx.arc(pxGd, pyGd, 6, 0, Math.PI * 2);
@@ -1016,8 +1016,8 @@ function updateLossLandscape() {
   if (state.sgdPath.length > 0) {
     const lastSgd = state.sgdPath[state.sgdPath.length - 1];
     const W = lossCanvas.width, H = lossCanvas.height;
-    const pxSgd = (lastSgd.x / 5 + 0.5) * W;
-    const pySgd = (-lastSgd.y / 5 + 0.5) * H;
+    const pxSgd = (lastSgd.x / 7 + 0.5) * W;
+    const pySgd = (-lastSgd.y / 7 + 0.5) * H;
     lossCtx.fillStyle = '#fb923c';
     lossCtx.beginPath();
     lossCtx.arc(pxSgd, pySgd, 5, 0, Math.PI * 2);
@@ -1800,11 +1800,11 @@ function resetOptModel() {
 function modelToLandscape(W, B) {
   const wx = W[0] && W[0][0] ? W[0][0][0] : 0;
   const wy = W[0] && W[0][0] ? W[0][0][1] : 0;
-  return { x: Math.max(-2.5, Math.min(2.5, wx * 4)), y: Math.max(-2.5, Math.min(2.5, wy * 4)) };
+  return { x: Math.max(-3.5, Math.min(3.5, wx * 8)), y: Math.max(-3.5, Math.min(3.5, wy * 8)) };
 }
 
 function w2c(wx, wy) {
-  return { px: (wx / 5 + 0.5) * lossCanvas.width, py: (-wy / 5 + 0.5) * lossCanvas.height };
+  return { px: (wx / 7 + 0.5) * lossCanvas.width, py: (-wy / 7 + 0.5) * lossCanvas.height };
 }
 
 function drawOptPath(ctx, path, color, alpha) {
