@@ -383,10 +383,6 @@ MathJax = {
     </div>
 
     <div class="ctrl-group" id="ctrl-transformer">
-      <div class="btn-group" id="mode-group">
-        <button class="btn active" data-mode="gd">梯度下降 GD</button>
-        <button class="btn" data-mode="sgd">随机梯度下降 SGD</button>
-      </div>
       <div class="slider-group">
         <span>η =</span>
         <input type="range" id="lr-slider" min="0.01" max="0.5" step="0.01" value="0.1" style="width:65px;">
@@ -478,7 +474,6 @@ let state = {
   pageMode: 'transformer',
 
   // --- Transformer state ---
-  mode: 'gd',
   tfLr: 0.1,
   running: false,
   reverseIndex: -1,
@@ -1001,18 +996,30 @@ function updateLossLandscape() {
     drawPath(lossCtx, state.sgdPath, '#fb923c', 0.9);
   }
 
-  const activePath = state.mode === 'gd' ? state.gdPath : state.sgdPath;
-  if (activePath.length > 0) {
-    const last = activePath[activePath.length - 1];
+  if (state.gdPath.length > 0) {
+    const lastGd = state.gdPath[state.gdPath.length - 1];
     const W = lossCanvas.width, H = lossCanvas.height;
-    const px = (last.x / 4 + 0.5) * W;
-    const py = (-last.y / 4 + 0.5) * H;
-    lossCtx.fillStyle = state.mode === 'gd' ? '#4d90fe' : '#fb923c';
+    const pxGd = (lastGd.x / 4 + 0.5) * W;
+    const pyGd = (-lastGd.y / 4 + 0.5) * H;
+    lossCtx.fillStyle = '#4d90fe';
     lossCtx.beginPath();
-    lossCtx.arc(px, py, 6, 0, Math.PI * 2);
+    lossCtx.arc(pxGd, pyGd, 6, 0, Math.PI * 2);
     lossCtx.fill();
     lossCtx.strokeStyle = '#fff';
     lossCtx.lineWidth = 1.5;
+    lossCtx.stroke();
+  }
+  if (state.sgdPath.length > 0) {
+    const lastSgd = state.sgdPath[state.sgdPath.length - 1];
+    const W = lossCanvas.width, H = lossCanvas.height;
+    const pxSgd = (lastSgd.x / 4 + 0.5) * W;
+    const pySgd = (-lastSgd.y / 4 + 0.5) * H;
+    lossCtx.fillStyle = '#fb923c';
+    lossCtx.beginPath();
+    lossCtx.arc(pxSgd, pySgd, 5, 0, Math.PI * 2);
+    lossCtx.fill();
+    lossCtx.strokeStyle = '#fff';
+    lossCtx.lineWidth = 1;
     lossCtx.stroke();
   }
 }
@@ -1272,23 +1279,12 @@ function runOneStep(epoch) {
   const sgdx = lastSgd.x - state.tfLr * (gradSgd.dx + (Math.random() - 0.5) * noiseScale);
   const sgdy = lastSgd.y - state.tfLr * (gradSgd.dy + (Math.random() - 0.5) * noiseScale);
 
-  if (state.mode === 'gd') {
-    state.gdPath.push(gdNext);
-    state.sgdPath.push({ x: sgdx, y: sgdy });
-    state.gdLosses.push(lossFn(gdNext.x, gdNext.y));
-    state.sgdLosses.push(lossFn(sgdx, sgdy));
-  } else {
-    const lastGd2 = state.gdPath[state.gdPath.length - 1];
-    const gradGd2 = lossGrad(lastGd2.x, lastGd2.y);
-    const gdNext2 = { x: lastGd2.x - lrGd * gradGd2.dx, y: lastGd2.y - lrGd * gradGd2.dy };
-    state.gdPath.push(gdNext2);
-    state.sgdPath.push({ x: sgdx, y: sgdy });
-    state.gdLosses.push(lossFn(gdNext2.x, gdNext2.y));
-    state.sgdLosses.push(lossFn(sgdx, sgdy));
-  }
+  state.gdPath.push(gdNext);
+  state.sgdPath.push({ x: sgdx, y: sgdy });
+  state.gdLosses.push(lossFn(gdNext.x, gdNext.y));
+  state.sgdLosses.push(lossFn(sgdx, sgdy));
 
-  const activePath = state.mode === 'gd' ? state.gdPath : state.sgdPath;
-  const last = activePath[activePath.length - 1];
+  const last = state.gdPath[state.gdPath.length - 1];
   state.currentLoss = lossFn(last.x, last.y);
   state.epoch = epoch;
 }
@@ -2309,19 +2305,6 @@ document.getElementById('opt-beta2-slider').addEventListener('input', function()
 
 document.getElementById('speed-slider').addEventListener('input', function() {
   state.speed = parseInt(this.value);
-});
-
-document.querySelectorAll('#mode-group .btn').forEach(btn => {
-  btn.addEventListener('click', function() {
-    document.querySelectorAll('#mode-group .btn').forEach(b => b.classList.remove('active'));
-    this.classList.add('active');
-    state.mode = this.dataset.mode;
-    if (state.epoch === 0) {
-      state.gdPath = [];
-      state.sgdPath = [];
-      updateLossLandscape();
-    }
-  });
 });
 
 document.addEventListener('keydown', function(e) {
