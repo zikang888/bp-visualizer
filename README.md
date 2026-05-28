@@ -2,10 +2,8 @@
 
 > 基于链式法则的 Transformer 反向传播算法交互式可视化教学工具
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Pure HTML/CSS/JS](https://img.shields.io/badge/stack-vanilla-ff69b4.svg)]()
-
-![Screenshot](./screenshot.png)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](#license)
+[![Pure HTML/CSS/JS](https://img.shields.io/badge/stack-vanilla-ff69b4.svg)](#技术栈)
 
 ## 概述
 
@@ -68,6 +66,13 @@ backprop-visualizer/
 3. **链式法则逐层展开** — 9 层节点的梯度计算公式覆盖了 Transformer 的核心算子：Softmax、LayerNorm、ReLU、残差连接
 
 ## 快速开始
+
+### 方式〇：拉取项目
+
+```bash
+git clone https://github.com/zikang888/bp-visualizer.git
+cd bp-visualizer
+```
 
 ### 方式一：浏览器直接打开
 
