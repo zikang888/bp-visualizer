@@ -444,10 +444,10 @@ MathJax = {
 
   <div class="panel" id="gradient-panel">
     <div class="panel-header">
-      <span class="panel-title" id="gradient-panel-title">梯度范数 · 逐层变化</span>
+      <span class="panel-title" id="gradient-panel-title">梯度范数 · 逐层变化 & GD vs SGD 损失曲线</span>
       <span class="panel-badge green" id="grad-norm-badge">‖∇‖ = —</span>
     </div>
-    <svg id="gradient-svg" class="gradient-svg" viewBox="0 0 560 310" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg id="gradient-svg" class="gradient-svg" viewBox="0 0 560 420" preserveAspectRatio="xMidYMid meet"></svg>
     <div class="legend" id="gradient-legend"></div>
   </div>
 
@@ -485,8 +485,8 @@ let state = {
   epoch: 0,
   gdPath: [],
   sgdPath: [],
-  gdLoss: [],
-  sgdLoss: [],
+  gdLosses: [],
+  sgdLosses: [],
   currentLoss: 0,
   animationTimer: null,
   maxEpochs: 40,
@@ -546,7 +546,7 @@ function switchTab(tab) {
     document.getElementById('header-subtitle').textContent = 'Backpropagation through Transformer Architecture';
     document.getElementById('arch-panel-title').textContent = 'Transformer 架构 · 梯度传播';
     document.getElementById('loss-panel-title').textContent = '损失景观 · 优化轨迹';
-    document.getElementById('gradient-panel-title').textContent = '梯度范数 · 逐层变化';
+    document.getElementById('gradient-panel-title').textContent = '梯度范数 · 逐层变化 & GD vs SGD 损失曲线';
     document.getElementById('detail-panel-title').textContent = '当前层 · 梯度计算细节';
     document.getElementById('btn-play').textContent = '▶ 开始传播';
     document.getElementById('iter-counter').textContent = 'iter 0';
@@ -1021,7 +1021,7 @@ function updateLossLandscape() {
 
 function drawGradientChart() {
   gradientSvg.selectAll('*').remove();
-  const W = 520, H = 240;
+  const W = 520, H = 255;
   const margin = { top: 20, right: 30, bottom: 70, left: 50 };
   const g = gradientSvg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
   const cw = W - margin.left - margin.right;
@@ -1095,6 +1095,90 @@ function drawGradientChart() {
     .attr('fill', '#5c6578').attr('font-size', '9')
     .attr('font-family', 'Inter, sans-serif')
     .text('反向传播顺序 →');
+
+  // --- Loss Comparison: GD vs SGD ---
+  const lossTop = H + 5;
+  const lossH = 130;
+  const lossMargin = { top: 18, right: 20, bottom: 28, left: 50 };
+  const lossCw = cw;
+  const lossCh = lossH - lossMargin.top - lossMargin.bottom;
+
+  const lg = gradientSvg.append('g').attr('transform', `translate(${margin.left + lossMargin.left},${lossTop + lossMargin.top})`);
+
+  const gdLossArr = state.gdLosses;
+  const sgdLossArr = state.sgdLosses;
+
+  lg.append('line')
+    .attr('x1', 0).attr('x2', lossCw - lossMargin.right).attr('y1', lossCh).attr('y2', lossCh)
+    .attr('stroke', '#252b38').attr('stroke-width', 1);
+
+  lg.append('line')
+    .attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', lossCh)
+    .attr('stroke', '#252b38').attr('stroke-width', 1);
+
+  lg.append('text')
+    .attr('x', lossCw / 2).attr('y', -5)
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#8b95a8').attr('font-size', '10')
+    .attr('font-family', 'Inter, sans-serif').attr('font-weight', '600')
+    .text('GD vs SGD  损失曲线对比');
+
+  if (gdLossArr.length > 0) {
+    const allLoss = [...gdLossArr, ...sgdLossArr];
+    const minL = Math.max(0, d3.min(allLoss) - 0.2);
+    const maxL = d3.max(allLoss) + 0.3;
+    const lossY = d3.scaleLinear().domain([minL, maxL]).range([lossCh, 0]);
+    const lossX = d3.scaleLinear().domain([0, gdLossArr.length - 1]).range([0, lossCw - lossMargin.right]);
+
+    lossY.ticks(3).forEach(t => {
+      lg.append('line').attr('x1', 0).attr('x2', lossCw - lossMargin.right)
+        .attr('y1', lossY(t)).attr('y2', lossY(t))
+        .attr('stroke', '#1e2333').attr('stroke-width', 0.5).attr('stroke-dasharray', '3,3');
+    });
+
+    lg.selectAll('.loss-yl').data(lossY.ticks(3)).join('text')
+      .attr('x', -6).attr('y', d => lossY(d) + 4)
+      .attr('text-anchor', 'end')
+      .attr('fill', '#5c6578').attr('font-size', '9')
+      .attr('font-family', 'JetBrains Mono, monospace')
+      .text(d => d.toFixed(2));
+
+    const gdLine = d3.line().x((d, i) => lossX(i)).y(d => lossY(d));
+    const sgdLine = d3.line().x((d, i) => lossX(i)).y(d => lossY(d));
+
+    lg.append('path').datum(gdLossArr).attr('d', gdLine)
+      .attr('fill', 'none').attr('stroke', '#4d90fe').attr('stroke-width', 2)
+      .attr('stroke-dasharray', 'none');
+
+    lg.append('path').datum(sgdLossArr).attr('d', sgdLine)
+      .attr('fill', 'none').attr('stroke', '#fb923c').attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', '4,3');
+
+    gdLossArr.forEach((v, i) => {
+      lg.append('circle').attr('cx', lossX(i)).attr('cy', lossY(v))
+        .attr('r', 2.5).attr('fill', '#4d90fe').attr('opacity', 0.8);
+    });
+    sgdLossArr.forEach((v, i) => {
+      lg.append('circle').attr('cx', lossX(i)).attr('cy', lossY(v))
+        .attr('r', 2).attr('fill', '#fb923c').attr('opacity', 0.7);
+    });
+
+    lg.append('text')
+      .attr('x', lossCw - lossMargin.right).attr('y', lossCh + 16)
+      .attr('text-anchor', 'end')
+      .attr('fill', '#5c6578').attr('font-size', '9')
+      .attr('font-family', 'Inter, sans-serif')
+      .text('epoch');
+
+    lg.append('rect').attr('x', lossCw - 135).attr('y', -11).attr('width', 9).attr('height', 9)
+      .attr('rx', 2).attr('fill', '#4d90fe');
+    lg.append('text').attr('x', lossCw - 122).attr('y', -3)
+      .attr('fill', '#4d90fe').attr('font-size', '9').attr('font-family', 'Inter, sans-serif').text('GD');
+    lg.append('rect').attr('x', lossCw - 72).attr('y', -11).attr('width', 9).attr('height', 9)
+      .attr('rx', 2).attr('fill', '#fb923c');
+    lg.append('text').attr('x', lossCw - 59).attr('y', -3)
+      .attr('fill', '#fb923c').attr('font-size', '9').attr('font-family', 'Inter, sans-serif').text('SGD');
+  }
 }
 
 function updateGradientChart() {
@@ -1153,14 +1237,16 @@ function runOneStep(epoch) {
   if (state.mode === 'gd') {
     state.gdPath.push(gdNext);
     state.sgdPath.push({ x: sgdx, y: sgdy });
+    state.gdLosses.push(lossFn(gdNext.x, gdNext.y));
+    state.sgdLosses.push(lossFn(sgdx, sgdy));
   } else {
     const lastGd2 = state.gdPath[state.gdPath.length - 1];
     const gradGd2 = lossGrad(lastGd2.x, lastGd2.y);
-    state.gdPath.push({
-      x: lastGd2.x - lrGd * gradGd2.dx,
-      y: lastGd2.y - lrGd * gradGd2.dy,
-    });
+    const gdNext2 = { x: lastGd2.x - lrGd * gradGd2.dx, y: lastGd2.y - lrGd * gradGd2.dy };
+    state.gdPath.push(gdNext2);
     state.sgdPath.push({ x: sgdx, y: sgdy });
+    state.gdLosses.push(lossFn(gdNext2.x, gdNext2.y));
+    state.sgdLosses.push(lossFn(sgdx, sgdy));
   }
 
   const activePath = state.mode === 'gd' ? state.gdPath : state.sgdPath;
@@ -1284,11 +1370,14 @@ function updateDetailPanel(layerId, epoch) {
   }
 
   const infoRow = document.getElementById('info-row');
+  const gdLoss = state.gdLosses.length ? state.gdLosses[state.gdLosses.length-1] : 0;
+  const sgdLoss = state.sgdLosses.length ? state.sgdLosses[state.sgdLosses.length-1] : 0;
   infoRow.innerHTML = `
     <div class="info-chip">epoch <span class="val">${epoch}</span></div>
     <div class="info-chip">‖∇<span class="val">${layerMap[layerId].gradNorm.toFixed(4)}</span></div>
     <div class="info-chip">η <span class="val">${state.tfLr.toFixed(2)}</span></div>
-    <div class="info-chip">模式 <span class="val">${state.mode.toUpperCase()}</span></div>
+    <div class="info-chip">GD Loss <span class="val" style="color:var(--accent-blue)">${gdLoss.toFixed(4)}</span></div>
+    <div class="info-chip">SGD Loss <span class="val" style="color:var(--accent-orange)">${sgdLoss.toFixed(4)}</span></div>
   `;
 }
 
@@ -1296,7 +1385,7 @@ function updateAllVisuals() {
   updateLossLandscape();
   updateGradientChart();
 
-  document.getElementById('loss-badge').textContent = `Loss = ${state.currentLoss.toFixed(4)}`;
+  document.getElementById('loss-badge').textContent = `GD: ${state.gdLosses.length ? state.gdLosses[state.gdLosses.length-1].toFixed(4) : '—'}  SGD: ${state.sgdLosses.length ? state.sgdLosses[state.sgdLosses.length-1].toFixed(4) : '—'}`;
 
   const maxGrad = Math.max(...REVERSE_ORDER.map(id => layerMap[id].gradNorm));
   document.getElementById('grad-norm-badge').textContent = `‖∇‖ₘₐₓ = ${maxGrad.toFixed(4)}`;
@@ -1397,6 +1486,8 @@ function resetAll() {
   state.epoch = 0;
   state.gdPath = [];
   state.sgdPath = [];
+  state.gdLosses = [];
+  state.sgdLosses = [];
   state.currentLoss = 0;
 
   REVERSE_ORDER.forEach(id => {
