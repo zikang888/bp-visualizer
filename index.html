@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>反向传播算法可视化 — Transformer 架构梯度传播演示</title>
+<title>反向传播算法可视化 — Transformer 架构梯度传播 & 优化器对比</title>
 <script>
 MathJax = {
   tex: {
@@ -35,11 +35,8 @@ MathJax = {
     --accent-orange: #fb923c;
     --accent-red: #f87171;
     --accent-pink: #f472b6;
-    --grad-start: #4d90fe;
-    --grad-end: #f472b6;
-    --grad-attn: #22d3ee;
-    --grad-ffn: #a78bfa;
-    --grad-norm: #34d399;
+    --momentum: #22d3ee;
+    --adam: #a78bfa;
     --shad-sm: 0 1px 2px rgba(0,0,0,0.3);
     --shad-md: 0 4px 12px rgba(0,0,0,0.4);
     --shad-lg: 0 8px 30px rgba(0,0,0,0.5);
@@ -61,17 +58,17 @@ MathJax = {
   .header {
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
-    padding: 20px 32px;
+    padding: 16px 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 12px;
   }
 
   .header-title h1 {
     font-family: 'Noto Serif SC', serif;
-    font-size: 1.5rem;
+    font-size: 1.35rem;
     font-weight: 700;
     background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
     -webkit-background-clip: text;
@@ -80,23 +77,23 @@ MathJax = {
   }
 
   .header-title .subtitle {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--text-tertiary);
     font-family: 'JetBrains Mono', monospace;
-    margin-top: 2px;
+    margin-top: 1px;
   }
 
   .controls {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
     flex-wrap: wrap;
   }
 
   .btn {
-    padding: 8px 18px;
+    padding: 7px 14px;
     border-radius: var(--radius-sm);
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     font-weight: 500;
     cursor: pointer;
     border: 1px solid var(--border-accent);
@@ -105,6 +102,7 @@ MathJax = {
     transition: all 0.2s;
     font-family: 'Inter', sans-serif;
     white-space: nowrap;
+    text-decoration: none;
   }
 
   .btn:hover { background: var(--border-accent); border-color: var(--text-tertiary); }
@@ -142,13 +140,24 @@ MathJax = {
     background: var(--accent-blue);
     color: #fff;
   }
+  .tab-group .btn.active {
+    background: var(--accent-blue);
+    color: #fff;
+  }
+  .tab-group .btn.active.opt-tab {
+    background: linear-gradient(135deg, var(--momentum), var(--adam));
+    color: #fff;
+  }
+
+  .ctrl-group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .ctrl-group.hidden { display: none; }
 
   .main-container {
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto auto;
-    gap: 16px;
-    padding: 20px 24px;
+    gap: 14px;
+    padding: 14px 20px;
     max-width: 1500px;
     margin: 0 auto;
   }
@@ -161,7 +170,7 @@ MathJax = {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 20px;
+    padding: 16px;
     position: relative;
     overflow: hidden;
   }
@@ -170,19 +179,19 @@ MathJax = {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
   }
 
   .panel-title {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
   }
 
   .panel-badge {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     padding: 3px 10px;
     border-radius: 20px;
     font-weight: 500;
@@ -191,28 +200,26 @@ MathJax = {
   }
   .panel-badge.warn { background: rgba(251,146,60,0.15); color: var(--accent-orange); }
   .panel-badge.green { background: rgba(52,211,153,0.15); color: var(--accent-green); }
+  .panel-badge.mom { background: rgba(34,211,238,0.15); color: var(--momentum); }
+  .panel-badge.adam { background: rgba(167,139,250,0.15); color: var(--adam); }
 
   #arch-panel { grid-row: span 2; }
 
-  #loss-panel { }
-  #gradient-panel { }
-  #detail-panel { }
-
   .arch-svg { width: 100%; height: 100%; min-height: 520px; }
-  .loss-canvas { width: 100%; height: 100%; min-height: 280px; border-radius: var(--radius-sm); }
+  .loss-canvas { width: 100%; height: 100%; min-height: 280px; border-radius: var(--radius-sm); display: block; }
   .gradient-svg { width: 100%; height: 100%; min-height: 280px; }
 
   .info-row {
     display: flex;
-    gap: 12px;
-    margin-top: 12px;
+    gap: 8px;
+    margin-top: 8px;
     flex-wrap: wrap;
   }
 
   .info-chip {
-    padding: 6px 14px;
+    padding: 5px 12px;
     border-radius: 20px;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
     color: var(--text-secondary);
@@ -220,20 +227,22 @@ MathJax = {
   }
 
   .info-chip .val { color: var(--accent-cyan); font-weight: 500; }
+  .info-chip.mom-chip .val { color: var(--momentum); }
+  .info-chip.adam-chip .val { color: var(--adam); }
 
   .formula-box {
-    margin-top: 12px;
-    padding: 14px 18px;
+    margin-top: 8px;
+    padding: 12px 14px;
     background: var(--bg-elevated);
     border-radius: var(--radius-md);
     border-left: 3px solid var(--accent-purple);
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
-    line-height: 2.2;
+    line-height: 2;
   }
 
   .formula-box mjx-container {
-    font-size: 0.9rem !important;
+    font-size: 0.88rem !important;
   }
 
   .formula-box .formula-main {
@@ -242,12 +251,12 @@ MathJax = {
 
   .formula-box .formula-desc {
     display: block;
-    margin-top: 8px;
-    padding-top: 8px;
+    margin-top: 6px;
+    padding-top: 6px;
     border-top: 1px solid var(--border);
     color: var(--text-tertiary);
-    font-size: 0.75rem;
-    line-height: 1.6;
+    font-size: 0.72rem;
+    line-height: 1.5;
     font-family: 'Inter', sans-serif;
   }
 
@@ -257,8 +266,8 @@ MathJax = {
   .slider-group {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 0.8rem;
+    gap: 6px;
+    font-size: 0.78rem;
     color: var(--text-secondary);
   }
 
@@ -271,8 +280,8 @@ MathJax = {
   }
   .slider-group input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background: var(--accent-blue);
     cursor: pointer;
@@ -280,29 +289,29 @@ MathJax = {
 
   .legend {
     display: flex;
-    gap: 16px;
+    gap: 14px;
     flex-wrap: wrap;
-    margin-top: 8px;
+    margin-top: 6px;
   }
 
   .legend-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.73rem;
+    gap: 5px;
+    font-size: 0.7rem;
     color: var(--text-tertiary);
   }
 
   .legend-dot {
-    width: 10px;
-    height: 10px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
   }
 
   .step-indicator {
     display: flex;
     gap: 4px;
-    margin-top: 10px;
+    margin-top: 8px;
   }
   .step-dot {
     width: 8px;
@@ -331,9 +340,9 @@ MathJax = {
   }
 
   .footer {
-    padding: 16px 24px;
+    padding: 14px 20px;
     text-align: center;
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     color: var(--text-tertiary);
     border-top: 1px solid var(--border);
   }
@@ -352,6 +361,12 @@ MathJax = {
   }
 
   .pulse { animation: pulse 1.5s infinite; }
+
+  .net-col-label {
+    font-size: 9px;
+    font-family: 'Noto Serif SC', serif;
+    fill: #4a5068;
+  }
 </style>
 </head>
 <body>
@@ -359,33 +374,59 @@ MathJax = {
 <div class="header">
   <div class="header-title">
     <h1>反向传播算法 · 梯度逐层传播</h1>
-    <div class="subtitle">Backpropagation through Transformer Architecture</div>
+    <div class="subtitle" id="header-subtitle">Backpropagation through Transformer Architecture</div>
   </div>
   <div class="controls">
-    <div class="btn-group" id="mode-group">
-      <button class="btn active" data-mode="gd">梯度下降 GD</button>
-      <button class="btn" data-mode="sgd">随机梯度下降 SGD</button>
+    <div class="btn-group tab-group" id="tab-group">
+      <button class="btn active" data-tab="transformer">Transformer · 反向传播</button>
+      <button class="btn" data-tab="optimizer">优化器对比 · Momentum vs Adam</button>
     </div>
-    <div class="slider-group">
-      <span>η =</span>
-      <input type="range" id="lr-slider" min="0.01" max="0.5" step="0.01" value="0.1" style="width:80px;">
-      <span id="lr-val" style="font-family:'JetBrains Mono',monospace;min-width:36px;">0.10</span>
+
+    <div class="ctrl-group" id="ctrl-transformer">
+      <div class="btn-group" id="mode-group">
+        <button class="btn active" data-mode="gd">梯度下降 GD</button>
+        <button class="btn" data-mode="sgd">随机梯度下降 SGD</button>
+      </div>
+      <div class="slider-group">
+        <span>η =</span>
+        <input type="range" id="lr-slider" min="0.01" max="0.5" step="0.01" value="0.1" style="width:65px;">
+        <span id="lr-val" style="font-family:'JetBrains Mono',monospace;min-width:32px;">0.10</span>
+      </div>
     </div>
+
+    <div class="ctrl-group hidden" id="ctrl-optimizer">
+      <div class="slider-group">
+        <span>η =</span>
+        <input type="range" id="opt-lr-slider" min="0.01" max="0.5" step="0.01" value="0.1" style="width:65px;">
+        <span id="opt-lr-val" style="font-family:'JetBrains Mono',monospace;min-width:32px;">0.10</span>
+      </div>
+      <div class="slider-group">
+        <span>β =</span>
+        <input type="range" id="opt-beta-slider" min="0.5" max="0.99" step="0.01" value="0.9" style="width:65px;">
+        <span id="opt-beta-val" style="font-family:'JetBrains Mono',monospace;min-width:32px;">0.90</span>
+      </div>
+      <div class="slider-group">
+        <span>β₂ =</span>
+        <input type="range" id="opt-beta2-slider" min="0.9" max="0.999" step="0.001" value="0.999" style="width:65px;">
+        <span id="opt-beta2-val" style="font-family:'JetBrains Mono',monospace;min-width:36px;">0.999</span>
+      </div>
+    </div>
+
     <button class="btn btn-primary" id="btn-play">▶ 开始传播</button>
     <button class="btn" id="btn-step">⏭ 单步</button>
     <button class="btn btn-warn" id="btn-reset">↺ 重置</button>
-    <a href="optimizers.html" class="btn" style="text-decoration:none;">📊 优化器对比</a>
     <div class="slider-group">
       <span>速度</span>
-      <input type="range" id="speed-slider" min="1" max="5" step="1" value="2" style="width:60px;">
+      <input type="range" id="speed-slider" min="1" max="5" step="1" value="2" style="width:50px;">
     </div>
+    <span id="iter-counter" style="font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text-secondary);">iter 0</span>
   </div>
 </div>
 
 <div class="main-container">
   <div class="panel" id="arch-panel">
     <div class="panel-header">
-      <span class="panel-title">Transformer 架构 · 梯度传播</span>
+      <span class="panel-title" id="arch-panel-title">Transformer 架构 · 梯度传播</span>
       <span class="panel-badge" id="phase-badge">就绪</span>
     </div>
     <svg id="arch-svg" class="arch-svg" viewBox="0 0 760 480" preserveAspectRatio="xMidYMid meet"></svg>
@@ -394,28 +435,25 @@ MathJax = {
 
   <div class="panel" id="loss-panel">
     <div class="panel-header">
-      <span class="panel-title">损失景观 · 优化轨迹</span>
+      <span class="panel-title" id="loss-panel-title">损失景观 · 优化轨迹</span>
       <span class="panel-badge" id="loss-badge">Loss = —</span>
     </div>
     <canvas id="loss-canvas" class="loss-canvas" width="560" height="280"></canvas>
-    <div class="legend">
-      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-blue);"></span>梯度下降 GD</div>
-      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-orange);"></span>随机梯度下降 SGD</div>
-      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-green);"></span>全局最优</div>
-    </div>
+    <div class="legend" id="loss-legend"></div>
   </div>
 
   <div class="panel" id="gradient-panel">
     <div class="panel-header">
-      <span class="panel-title">梯度范数 · 逐层变化</span>
+      <span class="panel-title" id="gradient-panel-title">梯度范数 · 逐层变化</span>
       <span class="panel-badge green" id="grad-norm-badge">‖∇‖ = —</span>
     </div>
     <svg id="gradient-svg" class="gradient-svg" viewBox="0 0 560 310" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="legend" id="gradient-legend"></div>
   </div>
 
   <div class="panel" id="detail-panel">
     <div class="panel-header">
-      <span class="panel-title">当前层 · 梯度计算细节</span>
+      <span class="panel-title" id="detail-panel-title">当前层 · 梯度计算细节</span>
       <span class="panel-badge warn" id="layer-badge">—</span>
     </div>
     <div class="formula-box" id="formula-display">
@@ -426,14 +464,135 @@ MathJax = {
 </div>
 
 <div class="footer">
-  Transformer Backpropagation Visualizer · 基于链式法则的逐层梯度传播演示 · 教学用途
+  Backpropagation Visualizer · Transformer 梯度传播 & 优化器对比 · 教学用途
 </div>
 
 <div class="tooltip" id="tooltip"></div>
 
 <script>
 // ============================================================
-// CONSTANTS & STATE
+// MASTER STATE
+// ============================================================
+
+let state = {
+  pageMode: 'transformer',
+
+  // --- Transformer state ---
+  mode: 'gd',
+  tfLr: 0.1,
+  running: false,
+  reverseIndex: -1,
+  epoch: 0,
+  gdPath: [],
+  sgdPath: [],
+  gdLoss: [],
+  sgdLoss: [],
+  currentLoss: 0,
+  animationTimer: null,
+  maxEpochs: 40,
+
+  // --- Optimizer state ---
+  optLr: 0.1,
+  optBeta: 0.9,
+  optBeta2: 0.999,
+  optIteration: 0,
+  optMaxIter: 80,
+  optRunning: false,
+  optTimer: null,
+
+  dims: [2, 4, 3, 1],
+  momW: [], momB: [], momVW: [], momVB: [],
+  adamW: [], adamB: [], adamMW: [], adamMB: [], adamVW: [], adamVB: [],
+  momGradNorms: [[], [], []],
+  adamGradNorms: [[], [], []],
+  momCurGrad: [0, 0, 0],
+  adamCurGrad: [0, 0, 0],
+  momPath: [], adamPath: [],
+  momLosses: [], adamLosses: [],
+};
+
+const speed = 2;
+
+// ============================================================
+// DOM REFS
+// ============================================================
+
+const archSvg = d3.select('#arch-svg');
+const gradientSvg = d3.select('#gradient-svg');
+const lossCanvas = document.getElementById('loss-canvas');
+const lossCtx = lossCanvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+
+function switchTab(tab) {
+  if (state.pageMode === tab) return;
+  stopAll();
+  state.pageMode = tab;
+
+  document.querySelectorAll('#tab-group .btn').forEach(b => {
+    b.classList.remove('active', 'opt-tab');
+  });
+  const activeBtn = document.querySelector(`#tab-group [data-tab="${tab}"]`);
+  if (tab === 'optimizer') activeBtn.classList.add('active', 'opt-tab');
+  else activeBtn.classList.add('active');
+
+  document.getElementById('ctrl-transformer').classList.toggle('hidden', tab !== 'transformer');
+  document.getElementById('ctrl-optimizer').classList.toggle('hidden', tab !== 'optimizer');
+
+  if (tab === 'transformer') {
+    document.getElementById('header-subtitle').textContent = 'Backpropagation through Transformer Architecture';
+    document.getElementById('arch-panel-title').textContent = 'Transformer 架构 · 梯度传播';
+    document.getElementById('loss-panel-title').textContent = '损失景观 · 优化轨迹';
+    document.getElementById('gradient-panel-title').textContent = '梯度范数 · 逐层变化';
+    document.getElementById('detail-panel-title').textContent = '当前层 · 梯度计算细节';
+    document.getElementById('btn-play').textContent = '▶ 开始传播';
+    document.getElementById('iter-counter').textContent = 'iter 0';
+    document.getElementById('loss-legend').innerHTML = `
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-blue);"></span>梯度下降 GD</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-orange);"></span>随机梯度下降 SGD</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-green);"></span>全局最优</div>
+    `;
+    document.getElementById('gradient-legend').innerHTML = '';
+    resetAll();
+  } else {
+    document.getElementById('header-subtitle').textContent = 'Momentum vs Adam — Layer-wise Gradient Propagation';
+    document.getElementById('arch-panel-title').textContent = 'MLP 网络 · 层间梯度传播';
+    document.getElementById('loss-panel-title').textContent = '损失景观 · 双优化器轨迹';
+    document.getElementById('gradient-panel-title').textContent = '逐层梯度范数 ‖∇W‖ · Momentum vs Adam';
+    document.getElementById('detail-panel-title').textContent = '当前步 · 逐层更新细节';
+    document.getElementById('btn-play').textContent = '▶ 开始';
+    document.getElementById('iter-counter').textContent = 'iter 0';
+    document.getElementById('loss-legend').innerHTML = `
+      <div class="legend-item"><span class="legend-dot" style="background:var(--momentum);"></span>Momentum</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--adam);"></span>Adam</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-green);"></span>最优点</div>
+    `;
+    document.getElementById('gradient-legend').innerHTML = `
+      <div class="legend-item"><span class="legend-dot" style="background:var(--momentum);"></span>Momentum</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--adam);"></span>Adam</div>
+    `;
+    resetOptAll();
+  }
+}
+
+document.querySelectorAll('#tab-group .btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    switchTab(this.dataset.tab);
+  });
+});
+
+function stopAll() {
+  state.running = false;
+  state.optRunning = false;
+  if (state.animationTimer) { clearTimeout(state.animationTimer); state.animationTimer = null; }
+  if (state.optTimer) { clearTimeout(state.optTimer); state.optTimer = null; }
+}
+
+// ============================================================
+// === TRANSFORMER MODE ===
 // ============================================================
 
 const LAYERS = [
@@ -467,41 +626,12 @@ const REVERSE_ORDER_DISPLAY = ['loss','output','addnorm2','ffn2','ffn1','addnorm
 const layerMap = {};
 LAYERS.forEach(l => layerMap[l.id] = l);
 
-let state = {
-  mode: 'gd',
-  lr: 0.1,
-  speed: 2,
-  running: false,
-  reverseIndex: -1,
-  epoch: 0,
-  gdPath: [],
-  sgdPath: [],
-  gdLoss: [],
-  sgdLoss: [],
-  currentLoss: 0,
-  animationTimer: null,
-  maxEpochs: 40,
-};
-
-// ============================================================
-// DOM REFS
-// ============================================================
-
-const archSvg = d3.select('#arch-svg');
-const gradientSvg = d3.select('#gradient-svg');
-const lossCanvas = document.getElementById('loss-canvas');
-const lossCtx = lossCanvas.getContext('2d');
-const tooltip = document.getElementById('tooltip');
-
-// ============================================================
-// ARCHITECTURE DIAGRAM
-// ============================================================
+// --- Transformer Architecture Diagram ---
 
 function drawArchitecture() {
   archSvg.selectAll('*').remove();
   const g = archSvg.append('g');
 
-  // Arrow defs
   const defs = archSvg.append('defs');
   defs.append('marker')
     .attr('id', 'arrowhead')
@@ -519,7 +649,6 @@ function drawArchitecture() {
     .attr('orient', 'auto')
     .append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', '#f87171');
 
-  // Block background boxes
   const blocks = [
     { x: 195, y: 60,  w: 140, h: 330, label: 'Attention Block',    color: 'rgba(34,211,238,0.04)' },
     { x: 385, y: 110, w: 150, h: 320, label: 'FFN Block',          color: 'rgba(167,139,250,0.04)' },
@@ -536,7 +665,6 @@ function drawArchitecture() {
       .text(b.label);
   });
 
-  // Column headers
   const headers = [
     { x: 75,  y: 195, text: '输入层' },
     { x: 265, y: 52,  text: '注意力子层' },
@@ -552,7 +680,6 @@ function drawArchitecture() {
       .text(h.text);
   });
 
-  // Draw edges
   EDGES.forEach(e => {
     const from = layerMap[e.from];
     const to = layerMap[e.to];
@@ -563,7 +690,6 @@ function drawArchitecture() {
 
     let pathData;
     if (e.skip) {
-      // Residual skip connection — route around the outside (bottom)
       const botY = Math.max(from.y + from.h, to.y + to.h) + 25;
       pathData = [
         `M ${x1} ${y1}`,
@@ -573,14 +699,12 @@ function drawArchitecture() {
         `L ${x2} ${y2}`,
       ].join(' ');
     } else if (from.x + from.w >= to.x - 10) {
-      // Same column — vertical line with slight curve
       const midY = (y1 + y2) / 2;
       pathData = [
         `M ${x1} ${y1}`,
         `C ${x1 + 20} ${y1}, ${x1 + 20} ${y2}, ${x2} ${y2}`,
       ].join(' ');
     } else {
-      // Cross-column — smooth horizontal curve
       const midX = (x1 + x2) / 2;
       pathData = [
         `M ${x1} ${y1}`,
@@ -612,7 +736,6 @@ function drawArchitecture() {
     }
   });
 
-  // Draw nodes
   LAYERS.forEach(l => {
     const nodeG = g.append('g')
       .attr('transform', `translate(${l.x},${l.y})`)
@@ -621,13 +744,11 @@ function drawArchitecture() {
       .on('mouseenter', (evt) => showTooltip(evt, l))
       .on('mouseleave', hideTooltip);
 
-    // Shadow rect
     nodeG.append('rect')
       .attr('width', l.w).attr('height', l.h)
       .attr('rx', 6).attr('fill', l.color)
       .attr('opacity', 0.06).attr('x', 1).attr('y', 1);
 
-    // Main rect
     nodeG.append('rect')
       .attr('class', 'layer-rect')
       .attr('width', l.w).attr('height', l.h)
@@ -635,7 +756,6 @@ function drawArchitecture() {
       .attr('stroke', l.color).attr('stroke-width', 1.5)
       .attr('stroke-opacity', 0.6);
 
-    // Label
     nodeG.append('text')
       .attr('x', l.w / 2).attr('y', l.h / 2 + 5)
       .attr('text-anchor', 'middle')
@@ -643,16 +763,13 @@ function drawArchitecture() {
       .attr('font-family', 'Inter, sans-serif').attr('font-weight', '500')
       .text(l.name);
 
-    // Small icon dot
     nodeG.append('circle')
       .attr('cx', 12).attr('cy', l.h / 2)
       .attr('r', 3.5).attr('fill', l.color).attr('opacity', 0.9);
   });
 
-  // Loss node special style
   archSvg.select('#node-loss .layer-rect').attr('stroke-dasharray', '5,4');
 
-  // Phase label
   g.append('text')
     .attr('x', 735).attr('y', 24)
     .attr('text-anchor', 'end')
@@ -661,7 +778,6 @@ function drawArchitecture() {
     .attr('id', 'phase-label-arch')
     .text('FORWARD PASS →');
 
-  // Flow direction arrows between columns
   const flowArrows = [
     { x1: 130, y1: 240, x2: 210, y2: 240 },
     { x1: 320, y1: 260, x2: 400, y2: 260 },
@@ -707,9 +823,7 @@ function animateGradientPulse(layerId) {
     .attr('stroke', layerMap[layerId].color);
 }
 
-// ============================================================
-// LOSS LANDSCAPE (Canvas)
-// ============================================================
+// --- Transformer Loss Landscape ---
 
 function colormap(t) {
   t = Math.max(0, Math.min(1, t));
@@ -733,7 +847,6 @@ function drawLossLandscape() {
   const H = lossCanvas.height;
   lossCtx.clearRect(0, 0, W, H);
 
-  // Compute loss range
   let minZ = Infinity, maxZ = -Infinity;
   const lossGrid = new Float32Array(W * H);
   for (let py = 0; py < H; py++) {
@@ -747,7 +860,6 @@ function drawLossLandscape() {
     }
   }
 
-  // Render heatmap
   const imageData = lossCtx.createImageData(W, H);
   const range = maxZ - minZ || 1;
   for (let py = 0; py < H; py++) {
@@ -764,7 +876,6 @@ function drawLossLandscape() {
   }
   lossCtx.putImageData(imageData, 0, 0);
 
-  // Draw contour lines using marching-squares-like approach
   const step = 3;
   const levels = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8];
 
@@ -787,7 +898,6 @@ function drawLossLandscape() {
 
         if (above === 0 || above === 4) continue;
 
-        // Find edge crossings
         const pts = [];
         const cx = [px, px + step, px + step, px];
         const cy = [py, py, py + step, py + step];
@@ -815,7 +925,6 @@ function drawLossLandscape() {
     lossCtx.stroke();
   });
 
-  // Axis labels
   lossCtx.fillStyle = '#4a5068';
   lossCtx.font = '10px Inter, sans-serif';
   lossCtx.textAlign = 'center';
@@ -823,7 +932,6 @@ function drawLossLandscape() {
   lossCtx.textAlign = 'left';
   lossCtx.fillText('w₂', 6, 16);
 
-  // Global minimum marker
   const gx = 0, gy = 0;
   const sx = (gx / 4 + 0.5) * W;
   const sy = (-gy / 4 + 0.5) * H;
@@ -872,7 +980,6 @@ function drawPath(ctx, path, color, alpha) {
   ctx.stroke();
   ctx.globalAlpha = 1;
 
-  // Draw points
   path.forEach((p, i) => {
     const px = (p.x / 4 + 0.5) * W;
     const py = (-p.y / 4 + 0.5) * H;
@@ -894,7 +1001,6 @@ function updateLossLandscape() {
     drawPath(lossCtx, state.sgdPath, '#fb923c', 0.9);
   }
 
-  // Current position highlight
   const activePath = state.mode === 'gd' ? state.gdPath : state.sgdPath;
   if (activePath.length > 0) {
     const last = activePath[activePath.length - 1];
@@ -911,9 +1017,7 @@ function updateLossLandscape() {
   }
 }
 
-// ============================================================
-// GRADIENT NORM CHART
-// ============================================================
+// --- Transformer Gradient Chart ---
 
 function drawGradientChart() {
   gradientSvg.selectAll('*').remove();
@@ -928,14 +1032,12 @@ function drawGradientChart() {
   const maxVal = Math.max(0.1, d3.max(displayLayers.map(id => layerMap[id].gradNorm)) || 1);
   const yScale = d3.scaleLinear().domain([0, maxVal * 1.2]).range([ch, 0]);
 
-  // Axes
   g.append('line').attr('x1', 0).attr('x2', cw).attr('y1', ch).attr('y2', ch)
     .attr('stroke', '#252b38').attr('stroke-width', 1);
 
   g.append('line').attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', ch)
     .attr('stroke', '#252b38').attr('stroke-width', 1);
 
-  // Y axis labels
   g.selectAll('.y-label').data(yScale.ticks(4)).join('text')
     .attr('class', 'y-label')
     .attr('x', -8).attr('y', d => yScale(d) + 4)
@@ -944,14 +1046,12 @@ function drawGradientChart() {
     .attr('font-family', 'JetBrains Mono, monospace')
     .text(d => d.toFixed(2));
 
-  // Y axis grid
   g.selectAll('.y-grid').data(yScale.ticks(4)).join('line')
     .attr('class', 'y-grid')
     .attr('x1', 0).attr('x2', cw)
     .attr('y1', d => yScale(d)).attr('y2', d => yScale(d))
     .attr('stroke', '#1e2333').attr('stroke-width', 0.5).attr('stroke-dasharray', '3,3');
 
-  // Bars
   displayLayers.forEach(id => {
     const layer = layerMap[id];
     const val = layer.gradNorm;
@@ -959,7 +1059,6 @@ function drawGradientChart() {
     const x = xScale(id);
     const barW = xScale.bandwidth();
 
-    // Glow
     if (val > 0.01) {
       g.append('rect')
         .attr('x', x - 2).attr('y', yScale(val)).attr('width', barW + 4).attr('height', barH)
@@ -971,7 +1070,6 @@ function drawGradientChart() {
       .attr('fill', layer.color).attr('opacity', 0.85).attr('rx', 3)
       .attr('id', `gradbar-${id}`);
 
-    // Value label
     g.append('text')
       .attr('x', x + barW / 2).attr('y', yScale(Math.max(0.001, val)) - 8)
       .attr('text-anchor', 'middle')
@@ -981,7 +1079,6 @@ function drawGradientChart() {
       .text(val > 0.001 ? val.toFixed(3) : '');
   });
 
-  // X labels — rotated to avoid overlap
   g.selectAll('.x-label').data(displayLayers).join('text')
     .attr('class', 'x-label')
     .attr('x', d => xScale(d) + xScale.bandwidth() / 2)
@@ -992,7 +1089,6 @@ function drawGradientChart() {
     .attr('font-family', 'Inter, sans-serif')
     .text(d => layerMap[d].name);
 
-  // Title
   g.append('text')
     .attr('x', cw / 2).attr('y', -2)
     .attr('text-anchor', 'middle')
@@ -1005,52 +1101,26 @@ function updateGradientChart() {
   drawGradientChart();
 }
 
-// ============================================================
-// SIMULATION LOGIC
-// ============================================================
+// --- Transformer Simulation ---
 
 function computeGradients(epoch) {
-  // Simulate layer-wise gradient computation with realistic Transformer behavior
   const t = state.mode === 'sgd' ? epoch : epoch * 0.5;
   const noise = state.mode === 'sgd' ? () => (Math.random() - 0.5) * 0.5 : () => 0;
 
-  // Loss gradient (∂L/∂logits) — starts strongest
   const lossGrad = 1.8 + Math.exp(-t * 0.4) * 3 + 0.3 * Math.sin(t * 0.8) + noise();
-
-  // Output projection
   const outGrad = lossGrad * (0.85 + 0.05 * Math.sin(t));
-
-  // Add & Norm 2
   const addnorm2Grad = outGrad * (0.75 + 0.1 * Math.cos(t * 0.5));
-
-  // FFN2 (second linear)
   const ffn2Grad = addnorm2Grad * (0.7 + 0.05 * Math.sin(t * 1.2));
-
-  // FFN1 (first linear + ReLU) — ReLU backward: some zeros
   const ffn1Grad = ffn2Grad * (0.6 + 0.1 * Math.cos(t * 0.7));
-
-  // Add & Norm 1
   const addnorm1Grad = ffn1Grad * (0.65 + 0.08 * Math.sin(t * 0.6));
-
-  // Attention — complex gradient due to softmax
   const attnGrad = addnorm1Grad * (0.55 + 0.1 * Math.cos(t * 0.9));
-
-  // QKV projection
   const qkvGrad = attnGrad * (0.5 + 0.05 * Math.sin(t));
-
-  // Embedding — gradient is smallest but still significant
   const embedGrad = qkvGrad * (0.4 + 0.08 * Math.cos(t * 0.4));
 
   return {
-    loss: lossGrad,
-    output: outGrad,
-    addnorm2: addnorm2Grad,
-    ffn2: ffn2Grad,
-    ffn1: ffn1Grad,
-    addnorm1: addnorm1Grad,
-    attn: attnGrad,
-    qkv: qkvGrad,
-    embed: embedGrad,
+    loss: lossGrad, output: outGrad, addnorm2: addnorm2Grad,
+    ffn2: ffn2Grad, ffn1: ffn1Grad, addnorm1: addnorm1Grad,
+    attn: attnGrad, qkv: qkvGrad, embed: embedGrad,
   };
 }
 
@@ -1060,7 +1130,6 @@ function runOneStep(epoch) {
     layerMap[id].gradNorm = grads[id];
   });
 
-  // Update loss landscape path
   if (state.gdPath.length === 0) {
     state.gdPath.push({ x: -1.8, y: 1.2 });
     state.sgdPath.push({ x: -1.8, y: 1.2 });
@@ -1070,7 +1139,7 @@ function runOneStep(epoch) {
   const lastSgd = state.sgdPath[state.sgdPath.length - 1];
 
   const gradGd = lossGrad(lastGd.x, lastGd.y);
-  const lrGd = state.lr * 0.5;
+  const lrGd = state.tfLr * 0.5;
   const gdNext = {
     x: lastGd.x - lrGd * gradGd.dx,
     y: lastGd.y - lrGd * gradGd.dy,
@@ -1078,8 +1147,8 @@ function runOneStep(epoch) {
 
   const gradSgd = lossGrad(lastSgd.x, lastSgd.y);
   const noiseScale = 0.3;
-  const sgdx = lastSgd.x - state.lr * (gradSgd.dx + (Math.random() - 0.5) * noiseScale);
-  const sgdy = lastSgd.y - state.lr * (gradSgd.dy + (Math.random() - 0.5) * noiseScale);
+  const sgdx = lastSgd.x - state.tfLr * (gradSgd.dx + (Math.random() - 0.5) * noiseScale);
+  const sgdy = lastSgd.y - state.tfLr * (gradSgd.dy + (Math.random() - 0.5) * noiseScale);
 
   if (state.mode === 'gd') {
     state.gdPath.push(gdNext);
@@ -1100,9 +1169,7 @@ function runOneStep(epoch) {
   state.epoch = epoch;
 }
 
-// ============================================================
-// ANIMATION CONTROLS
-// ============================================================
+// --- Transformer Animation ---
 
 function getSpeedMs() {
   const speeds = [1200, 800, 500, 300, 180];
@@ -1120,7 +1187,6 @@ function animateBackprop(epoch) {
 
   function stepLayer() {
     if (state.reverseIndex >= REVERSE_ORDER.length) {
-      // All layers done for this epoch
       setTimeout(() => {
         runOneStep(epoch);
         updateAllVisuals();
@@ -1135,7 +1201,6 @@ function animateBackprop(epoch) {
     highlightNode(layerId, 1);
     animateGradientPulse(layerId);
 
-    // Highlight incoming edges to this layer
     EDGES.forEach(e => {
       if (e.to === layerId) {
         highlightEdge(e.from, e.to, 0.7, true);
@@ -1218,12 +1283,11 @@ function updateDetailPanel(layerId, epoch) {
     MathJax.typesetPromise([display]).catch(console.warn);
   }
 
-  // Update info row
   const infoRow = document.getElementById('info-row');
   infoRow.innerHTML = `
     <div class="info-chip">epoch <span class="val">${epoch}</span></div>
     <div class="info-chip">‖∇<span class="val">${layerMap[layerId].gradNorm.toFixed(4)}</span></div>
-    <div class="info-chip">η <span class="val">${state.lr.toFixed(2)}</span></div>
+    <div class="info-chip">η <span class="val">${state.tfLr.toFixed(2)}</span></div>
     <div class="info-chip">模式 <span class="val">${state.mode.toUpperCase()}</span></div>
   `;
 }
@@ -1232,14 +1296,11 @@ function updateAllVisuals() {
   updateLossLandscape();
   updateGradientChart();
 
-  // Update loss badge
   document.getElementById('loss-badge').textContent = `Loss = ${state.currentLoss.toFixed(4)}`;
 
-  // Update grad norm badge
   const maxGrad = Math.max(...REVERSE_ORDER.map(id => layerMap[id].gradNorm));
   document.getElementById('grad-norm-badge').textContent = `‖∇‖ₘₐₓ = ${maxGrad.toFixed(4)}`;
 
-  // Update phase badge
   const phaseBadge = document.getElementById('phase-badge');
   if (state.running || state.reverseIndex >= 0) {
     phaseBadge.textContent = '反向传播中';
@@ -1249,7 +1310,6 @@ function updateAllVisuals() {
     phaseBadge.className = 'panel-badge';
   }
 
-  // Update phase label in arch
   const phaseLabel = archSvg.select('#phase-label-arch');
   if (phaseLabel.size() === 0) {
     archSvg.append('text')
@@ -1265,6 +1325,7 @@ function updateAllVisuals() {
   }
 
   updateStepIndicator();
+  document.getElementById('iter-counter').textContent = `epoch ${state.epoch}`;
 }
 
 function stopAnimation() {
@@ -1274,6 +1335,7 @@ function stopAnimation() {
 }
 
 function startAnimation() {
+  if (state.pageMode !== 'transformer') return;
   if (state.running) {
     stopAnimation();
     return;
@@ -1288,13 +1350,13 @@ function startAnimation() {
 }
 
 function stepOnce() {
+  if (state.pageMode !== 'transformer') return;
   if (state.running) return;
 
   const epoch = state.epoch + 1;
   state.epoch = epoch;
   runOneStep(epoch);
 
-  // Animate all layers backward in sequence
   state.reverseIndex = 0;
   const speedMs = 150;
 
@@ -1341,7 +1403,6 @@ function resetAll() {
     layerMap[id].gradNorm = 0;
   });
 
-  // Reset all nodes
   LAYERS.forEach(l => {
     const node = archSvg.select(`#node-${l.id} .layer-rect`);
     node.transition().duration(300)
@@ -1352,7 +1413,6 @@ function resetAll() {
       .attr('fill-opacity', 1);
   });
 
-  // Reset all edges
   EDGES.forEach(e => {
     const edge = archSvg.select(`#edge-${e.from}-${e.to}`);
     edge.transition().duration(300)
@@ -1367,14 +1427,684 @@ function resetAll() {
   document.getElementById('phase-badge').className = 'panel-badge';
   document.getElementById('layer-badge').textContent = '—';
   document.getElementById('formula-display').innerHTML =
-    '<span style="color:var(--text-tertiary);">点击「开始传播」或「单步」查看梯度计算过程</span>';
+    '<span style="color:var(--text-tertiary);">快捷键: <b style="color:var(--accent-cyan);">Space</b> 开始/停止 &nbsp; <b style="color:var(--accent-cyan);">→</b> 单步 &nbsp; <b style="color:var(--accent-cyan);">R</b> 重置<br>点击「开始传播」或「单步」查看梯度计算过程</span>';
   document.getElementById('info-row').innerHTML = '';
   document.getElementById('step-indicator').innerHTML = '';
+  document.getElementById('iter-counter').textContent = 'iter 0';
 
   const phaseLabel = archSvg.select('#phase-label-arch');
   if (phaseLabel.size() > 0) phaseLabel.text('FORWARD PASS →');
 
   updateAllVisuals();
+}
+
+// ============================================================
+// === OPTIMIZER MODE ===
+// ============================================================
+
+const INPUT = [1.0, 0.5];
+const TARGET = [0.8];
+
+function randn() { return (Math.random() * 2 - 1) * 0.5; }
+
+function initWeights(rows, cols) {
+  const w = [];
+  for (let i = 0; i < rows; i++) {
+    w[i] = [];
+    for (let j = 0; j < cols; j++) w[i][j] = randn();
+  }
+  return w;
+}
+
+function initBias(size) {
+  const b = [];
+  for (let i = 0; i < size; i++) b[i] = 0;
+  return b;
+}
+
+function zeros(rows, cols) {
+  const w = [];
+  for (let i = 0; i < rows; i++) {
+    w[i] = [];
+    for (let j = 0; j < cols; j++) w[i][j] = 0;
+  }
+  return w;
+}
+
+function zerosVec(size) {
+  const v = [];
+  for (let i = 0; i < size; i++) v[i] = 0;
+  return v;
+}
+
+function matVecMul(W, x) {
+  const out = zerosVec(W.length);
+  for (let i = 0; i < W.length; i++) {
+    for (let j = 0; j < W[0].length; j++) {
+      out[i] += W[i][j] * x[j];
+    }
+  }
+  return out;
+}
+
+function vecAdd(a, b) { return a.map((v, i) => v + b[i]); }
+
+function relu(x) { return x.map(v => Math.max(0, v)); }
+
+function reluGrad(x) { return x.map(v => v > 0 ? 1 : 0); }
+
+function frobeniusNorm(W) {
+  let sum = 0;
+  for (let i = 0; i < W.length; i++)
+    for (let j = 0; j < W[0].length; j++) sum += W[i][j] * W[i][j];
+  return Math.sqrt(sum);
+}
+
+function forwardPass(W, B, input) {
+  const cache = { z: [], a: [] };
+  let x = input;
+  cache.a.push(x);
+  for (let l = 0; l < W.length; l++) {
+    let z = matVecMul(W[l], x);
+    z = vecAdd(z, B[l]);
+    cache.z.push(z);
+    if (l < W.length - 1) {
+      x = relu(z);
+    } else {
+      x = z;
+    }
+    cache.a.push(x);
+  }
+  return { output: x, cache };
+}
+
+function backwardPass(W, cache, target) {
+  const L = W.length;
+  const gradW = [];
+  const gradB = [];
+  const yhat = cache.a[L];
+  let delta = yhat.map((v, i) => v - target[i]);
+
+  for (let l = L - 1; l >= 0; l--) {
+    const aPrev = cache.a[l];
+    const gW = zeros(W[l].length, W[l][0].length);
+    for (let i = 0; i < W[l].length; i++) {
+      for (let j = 0; j < W[l][0].length; j++) {
+        gW[i][j] = delta[i] * aPrev[j];
+      }
+    }
+    gradW.unshift(gW);
+    gradB.unshift([...delta]);
+
+    if (l > 0) {
+      const wTdelta = zerosVec(W[l][0].length);
+      for (let j = 0; j < W[l][0].length; j++) {
+        for (let i = 0; i < W[l].length; i++) {
+          wTdelta[j] += W[l][i][j] * delta[i];
+        }
+      }
+      const actGrad = reluGrad(cache.z[l - 1]);
+      delta = wTdelta.map((v, i) => v * actGrad[i]);
+    }
+  }
+  return { gradW, gradB };
+}
+
+function computeLoss(output, target) {
+  let loss = 0;
+  for (let i = 0; i < output.length; i++) {
+    const diff = output[i] - target[i];
+    loss += 0.5 * diff * diff;
+  }
+  return loss;
+}
+
+function momentumStep(W, B, VW, VB, gradW, gradB) {
+  const newW = [], newB = [], newVW = [], newVB = [];
+  for (let l = 0; l < W.length; l++) {
+    const vw = zeros(W[l].length, W[l][0].length);
+    const vb = zerosVec(B[l].length);
+    const w = zeros(W[l].length, W[l][0].length);
+    const b = zerosVec(B[l].length);
+    for (let i = 0; i < W[l].length; i++) {
+      for (let j = 0; j < W[l][0].length; j++) {
+        vw[i][j] = state.optBeta * VW[l][i][j] + state.optLr * gradW[l][i][j];
+        w[i][j] = W[l][i][j] - vw[i][j];
+      }
+      vb[i] = state.optBeta * VB[l][i] + state.optLr * gradB[l][i];
+      b[i] = B[l][i] - vb[i];
+    }
+    newW.push(w); newB.push(b); newVW.push(vw); newVB.push(vb);
+  }
+  return { W: newW, B: newB, VW: newVW, VB: newVB };
+}
+
+function adamStep(W, B, MW, MB, VW, VB, gradW, gradB, iter) {
+  const b1 = state.optBeta, b2 = state.optBeta2, eps = 1e-8;
+  const newW = [], newB = [], newMW = [], newMB = [], newVW = [], newVB = [];
+  const b1t = 1 - Math.pow(b1, iter);
+  const b2t = 1 - Math.pow(b2, iter);
+
+  for (let l = 0; l < W.length; l++) {
+    const mw = zeros(W[l].length, W[l][0].length);
+    const vw = zeros(W[l].length, W[l][0].length);
+    const mb = zerosVec(B[l].length);
+    const vb = zerosVec(B[l].length);
+    const w = zeros(W[l].length, W[l][0].length);
+    const b = zerosVec(B[l].length);
+
+    for (let i = 0; i < W[l].length; i++) {
+      for (let j = 0; j < W[l][0].length; j++) {
+        mw[i][j] = b1 * MW[l][i][j] + (1 - b1) * gradW[l][i][j];
+        vw[i][j] = b2 * VW[l][i][j] + (1 - b2) * gradW[l][i][j] * gradW[l][i][j];
+        const mhat = mw[i][j] / b1t;
+        const vhat = vw[i][j] / b2t;
+        w[i][j] = W[l][i][j] - state.optLr * mhat / (Math.sqrt(vhat) + eps);
+      }
+      mb[i] = b1 * MB[l][i] + (1 - b1) * gradB[l][i];
+      vb[i] = b2 * VB[l][i] + (1 - b2) * gradB[l][i] * gradB[l][i];
+      b[i] = B[l][i] - state.optLr * (mb[i] / b1t) / (Math.sqrt(vb[i] / b2t) + eps);
+    }
+    newW.push(w); newB.push(b);
+    newMW.push(mw); newMB.push(mb);
+    newVW.push(vw); newVB.push(vb);
+  }
+  return { W: newW, B: newB, MW: newMW, MB: newMB, VW: newVW, VB: newVB };
+}
+
+function initOptModel() {
+  const d = state.dims;
+  const W = [], B = [];
+  for (let l = 0; l < d.length - 1; l++) {
+    W.push(initWeights(d[l + 1], d[l]));
+    B.push(initBias(d[l + 1]));
+  }
+  const VW = W.map((w, i) => zeros(d[i + 1], d[i]));
+  const VB = B.map(b => zerosVec(b.length));
+  return { W, B, VW, VB };
+}
+
+function initAdamBuffers() {
+  const d = state.dims;
+  const MW = [], MB = [], VW = [], VB = [];
+  for (let l = 0; l < d.length - 1; l++) {
+    MW.push(zeros(d[l + 1], d[l]));
+    MB.push(zerosVec(d[l + 1]));
+    VW.push(zeros(d[l + 1], d[l]));
+    VB.push(zerosVec(d[l + 1]));
+  }
+  return { MW, MB, VW, VB };
+}
+
+function resetOptModel() {
+  const momModel = initOptModel();
+  state.momW = momModel.W;
+  state.momB = momModel.B;
+  state.momVW = momModel.VW;
+  state.momVB = momModel.VB;
+
+  const adamModel = initOptModel();
+  state.adamW = adamModel.W;
+  state.adamB = adamModel.B;
+  const ab = initAdamBuffers();
+  state.adamMW = ab.MW;
+  state.adamMB = ab.MB;
+  state.adamVW = ab.VW;
+  state.adamVB = ab.VB;
+
+  state.momGradNorms = [[], [], []];
+  state.adamGradNorms = [[], [], []];
+  state.momCurGrad = [0, 0, 0];
+  state.adamCurGrad = [0, 0, 0];
+  state.momPath = [];
+  state.adamPath = [];
+  state.momLosses = [];
+  state.adamLosses = [];
+}
+
+function modelToLandscape(W, B) {
+  const x = W[0] && W[0][0] ? W[0][0][0] * 3 : 0;
+  const y = W[0] && W[0][0] ? W[0][0][1] * 3 : 0;
+  return { x: Math.max(-2, Math.min(2, x)), y: Math.max(-2, Math.min(2, y)) };
+}
+
+function w2c(wx, wy) {
+  return { px: (wx / 4 + 0.5) * lossCanvas.width, py: (-wy / 4 + 0.5) * lossCanvas.height };
+}
+
+function drawOptPath(ctx, path, color, alpha) {
+  if (path.length < 2) return;
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  const p0 = w2c(path[0].x, path[0].y); ctx.moveTo(p0.px, p0.py);
+  for (let i = 1; i < path.length; i++) {
+    const p = w2c(path[i].x, path[i].y); ctx.lineTo(p.px, p.py);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  path.forEach((pt, i) => {
+    const p = w2c(pt.x, pt.y);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = alpha * (0.2 + 0.8 * i / Math.max(1, path.length - 1));
+    ctx.beginPath(); ctx.arc(p.px, p.py, i === path.length - 1 ? 4 : 1.5, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function updateOptLandscape() {
+  drawLossLandscape();
+  if (state.momPath.length > 0) drawOptPath(lossCtx, state.momPath, '#22d3ee', 0.95);
+  if (state.adamPath.length > 0) drawOptPath(lossCtx, state.adamPath, '#a78bfa', 0.95);
+
+  [state.momPath, state.adamPath].forEach((path, i) => {
+    if (path.length === 0) return;
+    const last = path[path.length - 1];
+    const p = w2c(last.x, last.y);
+    const color = i === 0 ? '#22d3ee' : '#a78bfa';
+    lossCtx.fillStyle = color;
+    lossCtx.beginPath(); lossCtx.arc(p.px, p.py, 5, 0, Math.PI * 2); lossCtx.fill();
+    lossCtx.strokeStyle = '#fff'; lossCtx.lineWidth = 1.5; lossCtx.stroke();
+  });
+}
+
+// --- MLP Network Diagram ---
+
+let networkPositions = null;
+
+function drawMLP() {
+  archSvg.selectAll('*').remove();
+  const dims = state.dims;
+  const layerNames = ['Input', 'Hidden₁', 'Hidden₂', 'Output'];
+  const layerColors = ['#4d90fe', '#22d3ee', '#a78bfa', '#f472b6'];
+  const totalW = 500, totalH = 200;
+  const marginX = 60, marginY = 25;
+  const cols = dims.length;
+  const colSpacing = (totalW - 2 * marginX) / (cols - 1);
+
+  networkPositions = [];
+
+  dims.forEach((n, col) => {
+    const cx = marginX + col * colSpacing;
+    const maxH = totalH - 2 * marginY;
+    const spacing = n > 1 ? maxH / (n - 1) : 0;
+    const startY = n > 1 ? marginY : totalH / 2;
+
+    networkPositions[col] = [];
+    for (let i = 0; i < n; i++) {
+      networkPositions[col][i] = {
+        x: cx,
+        y: startY + i * spacing,
+        r: Math.min(10, Math.max(6, 14 - n * 1.5)),
+      };
+    }
+  });
+
+  const g = archSvg.append('g');
+
+  dims.forEach((n, col) => {
+    const cx = marginX + col * colSpacing;
+    g.append('text')
+      .attr('x', cx).attr('y', 14)
+      .attr('text-anchor', 'middle')
+      .attr('class', 'net-col-label')
+      .text(`${layerNames[col]} (${n})`);
+  });
+
+  const defs = archSvg.append('defs');
+  defs.append('marker')
+    .attr('id', 'fwd-arrow').attr('viewBox', '0 0 10 10')
+    .attr('refX', 9).attr('refY', 5).attr('markerWidth', 5).attr('markerHeight', 5)
+    .attr('orient', 'auto')
+    .append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', '#323b4c');
+
+  defs.append('marker')
+    .attr('id', 'bwd-arrow').attr('viewBox', '0 0 10 10')
+    .attr('refX', 9).attr('refY', 5).attr('markerWidth', 5).attr('markerHeight', 5)
+    .attr('orient', 'auto')
+    .append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', '#f87171');
+
+  for (let c = 0; c < cols - 1; c++) {
+    for (let i = 0; i < dims[c]; i++) {
+      for (let j = 0; j < dims[c + 1]; j++) {
+        const from = networkPositions[c][i];
+        const to = networkPositions[c + 1][j];
+        const alpha = 0.08 + 0.06 * Math.min(i, j);
+        g.append('line')
+          .attr('x1', from.x + from.r).attr('y1', from.y)
+          .attr('x2', to.x - to.r).attr('y2', to.y)
+          .attr('stroke', layerColors[c])
+          .attr('stroke-width', 0.8)
+          .attr('opacity', alpha)
+          .attr('class', `edge-c${c}-i${i}-j${j}`);
+      }
+    }
+  }
+
+  dims.forEach((n, col) => {
+    for (let i = 0; i < n; i++) {
+      const pos = networkPositions[col][i];
+      const nodeG = g.append('g')
+        .attr('transform', `translate(${pos.x},${pos.y})`)
+        .attr('class', `node-col${col}`);
+
+      nodeG.append('circle')
+        .attr('r', pos.r)
+        .attr('fill', '#151922')
+        .attr('stroke', layerColors[col])
+        .attr('stroke-width', 1.5)
+        .attr('stroke-opacity', 0.7);
+
+      if (col > 0 && col < cols - 1) {
+        nodeG.append('text')
+          .attr('x', 0).attr('y', pos.r + 12)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#4a5068').attr('font-size', '7')
+          .attr('font-family', 'JetBrains Mono, monospace')
+          .text(i + 1);
+      }
+    }
+  });
+
+  g.append('text')
+    .attr('x', 510).attr('y', 18)
+    .attr('text-anchor', 'end')
+    .attr('fill', '#4a5068').attr('font-size', '11')
+    .attr('font-family', 'JetBrains Mono, monospace')
+    .attr('id', 'mlp-phase-label')
+    .text('FORWARD PASS →');
+}
+
+function highlightMLPLayer(col, intensity, isBackward) {
+  const layerColors = ['#4d90fe', '#22d3ee', '#a78bfa', '#f472b6'];
+  const nodes = archSvg.selectAll(`.node-col${col} circle`);
+  nodes.transition().duration(250)
+    .attr('fill', layerColors[col])
+    .attr('fill-opacity', 0.12 + intensity * 0.18)
+    .attr('stroke', isBackward ? '#f87171' : layerColors[col])
+    .attr('stroke-width', 1.5 + intensity * 2)
+    .attr('stroke-opacity', 0.5 + intensity * 0.5);
+}
+
+function resetMLPColors() {
+  const layerColors = ['#4d90fe', '#22d3ee', '#a78bfa', '#f472b6'];
+  for (let col = 0; col < 4; col++) {
+    const nodes = archSvg.selectAll(`.node-col${col} circle`);
+    nodes.transition().duration(300)
+      .attr('fill', '#151922')
+      .attr('fill-opacity', 1)
+      .attr('stroke', layerColors[col])
+      .attr('stroke-width', 1.5)
+      .attr('stroke-opacity', 0.7);
+  }
+}
+
+function animateMLPBackprop(callback) {
+  const speedMs = getSpeedMs();
+  const layers = [2, 1, 0];
+  let idx = 0;
+  function step() {
+    if (idx > 0) {
+      highlightMLPLayer(layers[idx - 1], 0.25, false);
+    }
+    if (idx >= layers.length) {
+      archSvg.select('#mlp-phase-label').text('FORWARD PASS →');
+      if (callback) callback();
+      return;
+    }
+    const col = layers[idx];
+    highlightMLPLayer(col, 1, true);
+    archSvg.select('#mlp-phase-label').text('BACKWARD PASS ←');
+    idx++;
+    setTimeout(step, speedMs);
+  }
+  step();
+}
+
+// --- Optimizer Gradient Chart ---
+
+function drawOptGradientChart() {
+  gradientSvg.selectAll('*').remove();
+  const W = 520, H = 220;
+  const margin = { top: 25, right: 30, bottom: 45, left: 55 };
+  const g = gradientSvg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+  const cw = W - margin.left - margin.right;
+  const ch = H - margin.top - margin.bottom;
+
+  const layers = ['Layer 1\n(W₁:4×2)', 'Layer 2\n(W₂:3×4)', 'Layer 3\n(W₃:1×3)'];
+  const momVals = state.momCurGrad;
+  const adamVals = state.adamCurGrad;
+
+  const allVals = [...momVals, ...adamVals];
+  const maxVal = Math.max(0.05, d3.max(allVals) || 0.1);
+
+  const x0 = d3.scaleBand().domain(layers).range([0, cw]).padding(0.3);
+  const x1 = d3.scaleBand().domain(['mom', 'adam']).range([0, x0.bandwidth()]).padding(0.2);
+  const yScale = d3.scaleLinear().domain([0, maxVal * 1.2]).range([ch, 0]);
+
+  yScale.ticks(4).forEach(t => {
+    g.append('line').attr('x1', 0).attr('x2', cw).attr('y1', yScale(t)).attr('y2', yScale(t))
+      .attr('stroke', '#1e2333').attr('stroke-width', 0.5).attr('stroke-dasharray', '3,3');
+  });
+
+  g.append('line').attr('x1', 0).attr('x2', cw).attr('y1', ch).attr('y2', ch)
+    .attr('stroke', '#252b38').attr('stroke-width', 1);
+  g.append('line').attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', ch)
+    .attr('stroke', '#252b38').attr('stroke-width', 1);
+
+  g.selectAll('.yl').data(yScale.ticks(4)).join('text')
+    .attr('x', -8).attr('y', d => yScale(d) + 4)
+    .attr('text-anchor', 'end').attr('fill', '#5c6578').attr('font-size', '10')
+    .attr('font-family', 'JetBrains Mono, monospace').text(d => d.toFixed(3));
+
+  // Legend
+  g.append('rect').attr('x', cw - 120).attr('y', -18).attr('width', 10).attr('height', 10)
+    .attr('rx', 2).attr('fill', '#22d3ee');
+  g.append('text').attr('x', cw - 106).attr('y', -9)
+    .attr('fill', '#22d3ee').attr('font-size', '10').attr('font-family', 'Inter, sans-serif').text('Momentum');
+  g.append('rect').attr('x', cw - 42).attr('y', -18).attr('width', 10).attr('height', 10)
+    .attr('rx', 2).attr('fill', '#a78bfa');
+  g.append('text').attr('x', cw - 28).attr('y', -9)
+    .attr('fill', '#a78bfa').attr('font-size', '10').attr('font-family', 'Inter, sans-serif').text('Adam');
+
+  layers.forEach((layerLabel, i) => {
+    const x = x0(layerLabel);
+
+    [{ val: momVals[i], color: '#22d3ee', key: 'mom' },
+      { val: adamVals[i], color: '#a78bfa', key: 'adam' }].forEach(opt => {
+      const barX = x + x1(opt.key);
+      const barW = x1.bandwidth();
+      const barH = Math.max(0, ch - yScale(Math.max(0.0001, opt.val)));
+      const barY = yScale(Math.max(0.0001, opt.val));
+
+      g.append('rect')
+        .attr('x', barX).attr('y', barY).attr('width', barW).attr('height', barH)
+        .attr('fill', opt.color).attr('opacity', 0.85).attr('rx', 3);
+
+      g.append('text')
+        .attr('x', barX + barW / 2).attr('y', barY - 6)
+        .attr('text-anchor', 'middle')
+        .attr('fill', opt.color).attr('font-size', '9')
+        .attr('font-family', 'JetBrains Mono, monospace')
+        .text(opt.val > 0.0001 ? opt.val.toFixed(4) : '');
+    });
+
+    g.append('text')
+      .attr('x', x + x0.bandwidth() / 2).attr('y', ch + 18)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#5c6578').attr('font-size', '10')
+      .attr('font-family', 'Inter, sans-serif')
+      .text(layerLabel.replace('\n', ' '));
+  });
+}
+
+// --- Optimizer Simulation ---
+
+function runOptIteration() {
+  const iter = state.optIteration + 1;
+
+  const fwdMom = forwardPass(state.momW, state.momB, INPUT);
+  const momLoss = computeLoss(fwdMom.output, TARGET);
+  const bwdMom = backwardPass(state.momW, fwdMom.cache, TARGET);
+  const momUpdate = momentumStep(state.momW, state.momB, state.momVW, state.momVB, bwdMom.gradW, bwdMom.gradB);
+  state.momW = momUpdate.W; state.momB = momUpdate.B;
+  state.momVW = momUpdate.VW; state.momVB = momUpdate.VB;
+
+  const fwdAdam = forwardPass(state.adamW, state.adamB, INPUT);
+  const adamLoss = computeLoss(fwdAdam.output, TARGET);
+  const bwdAdam = backwardPass(state.adamW, fwdAdam.cache, TARGET);
+  const adamUpdate = adamStep(state.adamW, state.adamB, state.adamMW, state.adamMB, state.adamVW, state.adamVB, bwdAdam.gradW, bwdAdam.gradB, iter);
+  state.adamW = adamUpdate.W; state.adamB = adamUpdate.B;
+  state.adamMW = adamUpdate.MW; state.adamMB = adamUpdate.MB;
+  state.adamVW = adamUpdate.VW; state.adamVB = adamUpdate.VB;
+
+  const momGNorm = bwdMom.gradW.map(w => frobeniusNorm(w));
+  const adamGNorm = bwdAdam.gradW.map(w => frobeniusNorm(w));
+  state.momCurGrad = momGNorm;
+  state.adamCurGrad = adamGNorm;
+  for (let l = 0; l < 3; l++) {
+    state.momGradNorms[l].push(momGNorm[l]);
+    state.adamGradNorms[l].push(adamGNorm[l]);
+  }
+
+  const momPos = modelToLandscape(state.momW, state.momB);
+  const adamPos = modelToLandscape(state.adamW, state.adamB);
+  state.momPath.push(momPos);
+  state.adamPath.push(adamPos);
+  state.momLosses.push(momLoss);
+  state.adamLosses.push(adamLoss);
+
+  state.optIteration = iter;
+}
+
+function updateOptDetailPanel() {
+  const display = document.getElementById('formula-display');
+  const badge = document.getElementById('layer-badge');
+  const iter = state.optIteration;
+
+  if (iter === 0) {
+    display.innerHTML = '<span style="color:var(--text-tertiary);">点击「开始」或「单步」查看每层梯度及优化器更新量</span>';
+    badge.textContent = '—'; badge.className = 'panel-badge adam';
+    document.getElementById('info-row').innerHTML = '';
+    return;
+  }
+
+  badge.textContent = 'iter ' + iter; badge.className = 'panel-badge adam';
+
+  const momG = state.momCurGrad;
+  const adamG = state.adamCurGrad;
+  const momL = state.momLosses[state.momLosses.length - 1];
+  const adamL = state.adamLosses[state.adamLosses.length - 1];
+
+  display.innerHTML = `
+    <div style="color:var(--momentum);font-weight:600;margin-bottom:2px;">Momentum — step ${iter}</div>
+    <div class="formula-main">
+      ‖∇W₁‖ = ${momG[0].toFixed(4)} &nbsp; ‖∇W₂‖ = ${momG[1].toFixed(4)} &nbsp; ‖∇W₃‖ = ${momG[2].toFixed(4)}<br>
+      $v_t = \\beta v_{t-1} + \\eta \\nabla L$ → Update weights
+    </div>
+    <div class="formula-desc">Loss = ${momL.toFixed(5)} &nbsp; | &nbsp; 动量累积后参数更新方向更平滑</div>
+
+    <div style="color:var(--adam);font-weight:600;margin-top:6px;margin-bottom:2px;">Adam — step ${iter}</div>
+    <div class="formula-main">
+      ‖∇W₁‖ = ${adamG[0].toFixed(4)} &nbsp; ‖∇W₂‖ = ${adamG[1].toFixed(4)} &nbsp; ‖∇W₃‖ = ${adamG[2].toFixed(4)}<br>
+      $m_t, v_t \\to \\hat{m}_t, \\hat{v}_t \\to \\theta_{t+1} = \\theta_t - \\eta\\frac{\\hat{m}_t}{\\sqrt{\\hat{v}_t}+\\varepsilon}$
+    </div>
+    <div class="formula-desc">Loss = ${adamL.toFixed(5)} &nbsp; | &nbsp; 二阶矩自适应缩放每层学习率</div>
+  `;
+
+  if (window.MathJax && MathJax.typesetPromise) {
+    MathJax.typesetPromise([display]).catch(console.warn);
+  }
+
+  document.getElementById('info-row').innerHTML = `
+    <div class="info-chip mom-chip">M Loss <span class="val">${momL.toFixed(5)}</span></div>
+    <div class="info-chip adam-chip">A Loss <span class="val">${adamL.toFixed(5)}</span></div>
+    <div class="info-chip">η <span class="val">${state.optLr.toFixed(2)}</span></div>
+    <div class="info-chip">β <span class="val">${state.optBeta.toFixed(2)}</span></div>
+  `;
+}
+
+function updateOptAll() {
+  updateOptLandscape();
+  drawOptGradientChart();
+  updateOptDetailPanel();
+
+  const momL = state.momLosses.length > 0 ? state.momLosses[state.momLosses.length - 1].toFixed(4) : '—';
+  const adamL = state.adamLosses.length > 0 ? state.adamLosses[state.adamLosses.length - 1].toFixed(4) : '—';
+  document.getElementById('loss-badge').textContent = `M: ${momL}  A: ${adamL}`;
+  document.getElementById('loss-badge').className = 'panel-badge';
+  document.getElementById('iter-counter').textContent = `iter ${state.optIteration}`;
+
+  const maxG = Math.max(...state.momCurGrad, ...state.adamCurGrad);
+  document.getElementById('grad-norm-badge').textContent = maxG > 0 ? `max ‖∇W‖ = ${maxG.toFixed(4)}` : '—';
+  document.getElementById('grad-norm-badge').className = 'panel-badge green';
+
+  const phaseBadge = document.getElementById('phase-badge');
+  if (state.optRunning || state.optIteration > 0) {
+    phaseBadge.textContent = '训练中';
+    phaseBadge.className = 'panel-badge mom';
+  } else {
+    phaseBadge.textContent = '就绪';
+    phaseBadge.className = 'panel-badge';
+  }
+}
+
+// --- Optimizer Animation ---
+
+function optAnimate() {
+  if (state.optIteration >= state.optMaxIter) { stopOptAnimation(); return; }
+  runOptIteration();
+  updateOptAll();
+  animateMLPBackprop(() => {});
+
+  if (state.optRunning) {
+    state.optTimer = setTimeout(optAnimate, getSpeedMs() * 2.5);
+  }
+}
+
+function startOptAnimation() {
+  if (state.optRunning) { stopOptAnimation(); return; }
+  state.optRunning = true;
+  document.getElementById('btn-play').textContent = '⏸ 停止';
+  optAnimate();
+}
+
+function stopOptAnimation() {
+  state.optRunning = false;
+  document.getElementById('btn-play').textContent = '▶ 开始';
+  if (state.optTimer) { clearTimeout(state.optTimer); state.optTimer = null; }
+}
+
+function optStepOnce() {
+  if (state.optRunning) return;
+  if (state.optIteration >= state.optMaxIter) return;
+  runOptIteration();
+  updateOptAll();
+  animateMLPBackprop(() => {});
+}
+
+function resetOptAll() {
+  stopOptAnimation();
+  state.optIteration = 0;
+  resetOptModel();
+
+  document.getElementById('loss-badge').textContent = 'Loss = —';
+  document.getElementById('loss-badge').className = 'panel-badge';
+  document.getElementById('layer-badge').textContent = '—';
+  document.getElementById('layer-badge').className = 'panel-badge adam';
+  document.getElementById('formula-display').innerHTML =
+    '<span style="color:var(--text-tertiary);">点击「开始」或「单步」查看每层梯度及优化器更新量</span>';
+  document.getElementById('info-row').innerHTML = '';
+  document.getElementById('iter-counter').textContent = 'iter 0';
+  document.getElementById('phase-badge').textContent = '就绪';
+  document.getElementById('phase-badge').className = 'panel-badge';
+  document.getElementById('grad-norm-badge').textContent = '‖∇‖ = —';
+  document.getElementById('grad-norm-badge').className = 'panel-badge green';
+  document.getElementById('step-indicator').innerHTML = '';
+
+  resetMLPColors();
+  archSvg.select('#mlp-phase-label').text('FORWARD PASS →');
+
+  updateOptAll();
 }
 
 // ============================================================
@@ -1394,16 +2124,51 @@ function hideTooltip() {
 }
 
 // ============================================================
-// EVENT HANDLERS
+// UNIFIED EVENT HANDLERS
 // ============================================================
 
-document.getElementById('btn-play').addEventListener('click', startAnimation);
-document.getElementById('btn-step').addEventListener('click', stepOnce);
-document.getElementById('btn-reset').addEventListener('click', resetAll);
+document.getElementById('btn-play').addEventListener('click', function() {
+  if (state.pageMode === 'transformer') {
+    startAnimation();
+  } else {
+    startOptAnimation();
+  }
+});
+
+document.getElementById('btn-step').addEventListener('click', function() {
+  if (state.pageMode === 'transformer') {
+    stepOnce();
+  } else {
+    optStepOnce();
+  }
+});
+
+document.getElementById('btn-reset').addEventListener('click', function() {
+  if (state.pageMode === 'transformer') {
+    resetAll();
+  } else {
+    resetOptAll();
+  }
+});
 
 document.getElementById('lr-slider').addEventListener('input', function() {
-  state.lr = parseFloat(this.value);
-  document.getElementById('lr-val').textContent = state.lr.toFixed(2);
+  state.tfLr = parseFloat(this.value);
+  document.getElementById('lr-val').textContent = state.tfLr.toFixed(2);
+});
+
+document.getElementById('opt-lr-slider').addEventListener('input', function() {
+  state.optLr = parseFloat(this.value);
+  document.getElementById('opt-lr-val').textContent = state.optLr.toFixed(2);
+});
+
+document.getElementById('opt-beta-slider').addEventListener('input', function() {
+  state.optBeta = parseFloat(this.value);
+  document.getElementById('opt-beta-val').textContent = state.optBeta.toFixed(2);
+});
+
+document.getElementById('opt-beta2-slider').addEventListener('input', function() {
+  state.optBeta2 = parseFloat(this.value);
+  document.getElementById('opt-beta2-val').textContent = state.optBeta2.toFixed(3);
 });
 
 document.getElementById('speed-slider').addEventListener('input', function() {
@@ -1416,7 +2181,6 @@ document.querySelectorAll('#mode-group .btn').forEach(btn => {
     this.classList.add('active');
     state.mode = this.dataset.mode;
     if (state.epoch === 0) {
-      // Reset paths on mode switch
       state.gdPath = [];
       state.sgdPath = [];
       updateLossLandscape();
@@ -1424,17 +2188,19 @@ document.querySelectorAll('#mode-group .btn').forEach(btn => {
   });
 });
 
-// Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
   if (e.key === ' ') {
     e.preventDefault();
-    startAnimation();
+    if (state.pageMode === 'transformer') startAnimation();
+    else startOptAnimation();
   } else if (e.key === 'ArrowRight') {
     e.preventDefault();
-    stepOnce();
+    if (state.pageMode === 'transformer') stepOnce();
+    else optStepOnce();
   } else if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
-    resetAll();
+    if (state.pageMode === 'transformer') resetAll();
+    else resetOptAll();
   }
 });
 
@@ -1446,15 +2212,14 @@ function init() {
   drawArchitecture();
   drawLossLandscape();
   drawGradientChart();
+  resetOptModel();
 
-  // Add some initial steps to populate the chart
   REVERSE_ORDER.forEach(id => {
     layerMap[id].gradNorm = 0;
   });
 
   updateStepIndicator();
 
-  // Keyboard shortcuts hint
   document.getElementById('formula-display').innerHTML =
     '<span style="color:var(--text-tertiary);">快捷键: <b style="color:var(--accent-cyan);">Space</b> 开始/停止 &nbsp; <b style="color:var(--accent-cyan);">→</b> 单步 &nbsp; <b style="color:var(--accent-cyan);">R</b> 重置<br>点击「开始传播」或「单步」查看梯度计算过程</span>';
 }
